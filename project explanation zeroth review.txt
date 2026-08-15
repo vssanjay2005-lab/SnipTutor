@@ -1,0 +1,47 @@
+1.TITLE Slide(explain):  
+“Welcome everyone. Today I’m presenting my final-year project titled SnipTutor. It’s a desktop application that combines a snipping tool interface with an AI multimodal agent. The goal is to help both students and developers resolve doubts instantly — whether it’s a coding error or a difficult concept in study material. The project is designed to save time, improve productivity, and make learning or debugging smoother. I’ll walk you through the problem, our proposed solution, unique features, and why SnipTutor stands out compared to existing tools.”
+
+2.Abstract:
+“In this abstract, I want to give you a quick overview of SnipTutor. It’s a desktop app that looks like a snipping tool but has Gemini AI built inside. The idea is to remove the tedious steps of saving and uploading screenshots or text into separate AI platforms. Instead, users can capture a screenshot with a hotkey or upload files like PDFs, documents, or even website URLs directly. The AI then gives instant answers. We’ve designed two modes: Student Mode for resolving academic doubts, and Developer Mode for debugging code. What makes SnipTutor unique is the choice between manual guidance and automated fixes. Beginners can learn step-by-step, while advanced developers can automate tasks. We also added a floating split-screen so users can work while viewing AI suggestions side-by-side. Overall, SnipTutor is a unified, user-friendly environment that saves time, boosts productivity, and supports learning for both students and developers.”
+
+3.introduction:
+“In the introduction, let’s look at why SnipTutor is needed.
+Developers often face errors while coding and must take screenshots, save them, and upload them to an AI assistant – a slow process that interrupts their workflow.
+Students face a similar issue when they get stuck on a paragraph in lecture notes or a website; they have to copy and upload text separately to get help.
+These repetitive steps waste time and break concentration.
+
+SnipTutor solves this by combining a snipping‑tool interface with an AI agent right inside the desktop app.
+It allows instant doubt resolution through screenshots, PDFs, or URLs – all handled in one place.
+This project is needed because it makes learning and debugging faster, smoother, and more interactive for both students and developers.”
+
+4.problem statement:
+The problem we are solving is the inefficiency in how developers and students currently use AI assistants. Developers waste time capturing errors, saving screenshots, and uploading them to external tools. Students face similar delays when they copy text from PDFs or websites to get help. Current AI assistants are powerful but not integrated into desktop workflows, and they don’t support all input types in one place. There is no unified tool that combines screen‑capturing with multimodal AI support for both coding and academic learning. SnipTutor aims to fill this gap by providing a single desktop app that makes doubt resolution instant and seamless.”
+
+5.existing system:
+Let’s look at the existing systems. Developers currently rely on separate snipping tools to capture errors, then save and upload screenshots into AI assistants like Copilot or Gemini. This process takes several steps and interrupts their coding flow. Students face a similar challenge: they copy text from PDFs or websites, save it, and paste it into AI platforms to get explanations.
+
+While these tools are powerful, they are not integrated into the desktop workflow. They are either specialized for coding or for learning, but not both. The process is time‑consuming, repetitive, and breaks concentration. This gap in existing systems is what SnipTutor aims to solve by providing a unified, multimodal desktop app.”
+
+Acknowledge their existence first (shows awareness):
+“Yes, tools like GitHub Copilot in VS Code and Antigravity already exist and are widely used by developers.”
+
+Then highlight your differentiators clearly:
+
+Scope of Use: Copilot is coding‑focused inside VS Code. SnipTutor supports both students and developers in one app.
+
+Multimodal Inputs: Copilot mainly works with code context. SnipTutor accepts screenshots, saved images, PDFs, documents, Excel files, and URLs — all unified in one desktop app.
+
+Manual vs Auto‑Fix Choice: Copilot automates fixes directly. SnipTutor gives two options — manual guidance for beginners to learn, or auto‑fix for experienced developers.
+
+Floating Split‑Screen: Copilot is embedded in VS Code only. SnipTutor provides a floating side‑by‑side window that works with any environment (coding IDE, PDF reader, browser, etc.).
+
+Conversation Management: SnipTutor includes Gemini‑style chat management (new chats, edit, delete), which Copilot doesn’t emphasize.
+
+
+4.literature survey:
+In our literature survey, we reviewed five ScienceDirect papers. The first three focus on multimodal AI — generalist architectures, vision-language models, and generative AI for motion. They highlight challenges but remain theoretical or domain-specific. The last two focus on AI in education, showing benefits in tutoring and adaptive learning but limited multimodal support.
+
+Compared to these, SnipTutor is unique. It’s not just theoretical — it’s a practical desktop app. It integrates multimodal AI with workflow tools like hotkey-triggered screenshots and floating split-screen. It supports both students and developers, offering manual learning for beginners and automation for experts. This combination of multimodal input, workflow integration, and dual modes makes SnipTutor stand out from existing research.”
+
+
+

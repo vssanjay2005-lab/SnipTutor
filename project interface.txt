@@ -1,0 +1,48 @@
+so our project consists of hot key (ctr+shift+space) that opens the app along with full screen shot being uploaded automatically with a name generated to the img that will also be saved in downloads automatically in file explorer it happens in backend..but the ai interface along with the snipping tool features pops up in the screen , the img is uploaded automatically in the bar where we type our question and give prompt..also we can upload multi input types like text typing, upload img,pdf,doc,excel,web url all at the same time more than once for extra data about the query..ai will scan these inputs and gets ready to answer our prompt within milliseconds or seconds. Otherwise we can also directly open the desktop tool by just clicking it and use it just like chatgtp for answering small doubts...inside the bar where we will our question there should be two small button like labels one "student mode "  & " developer mode"...student mode by default is going increase productivity of learning by default explaining everything in simple words that an average man can understand and explaining it in the correct technical form atlast to conclude it technically..and developer mode helps in coding ,debugging tasks. And..and also gives the option of automation toggle... If enabled can automate fix  syntax errors by itself increasing productivity for developers professional ones..whereas if disabled the user can just  refer the solution and do debugging manually so it does not stop the learnign curve for begineers and at the same time...in this project human like simple words teaching assistant for students and task automation for developers are the proposed solution ..should we do this as a desktop app or website app in order to get selected for IEEE conference paper ..
+
+
+
+
+
+🏆 Base Paper (Closest Match to Your Idea)
+SASy: Screenshot Analysis System (IEEE, 2025)
+
+Focus: AI‑based screenshot analysis.
+
+Why: It’s the closest existing IEEE work to your snipping tool concept.
+
+Gap: SASy focuses on screenshot understanding (mostly mobile), but does not extend to desktop dual‑mode AI (developer debugging + student tutoring).
+
+Your novelty: Extending screenshot intelligence into a desktop app with dual modes, automation toggle, and multimodal input fusion.
+
+🔧 Debugging & Developer Productivity
+Hybrid Classical‑AI Systems for Software Testing and Bug Fixing (2025)
+
+AI‑Driven Software Test Automation: An AI4SE‑Oriented Survey (2025)
+
+Leveraging Large Language Models for Automated Bug Detection and Resolution (2025)
+
+Deep Learning for Source Code Error Detection and Correction (2025)
+
+🎓 Intelligent Tutoring & Student Mode
+AI‑Powered Intelligent Tutoring Systems in Higher Education: A Review (2025)
+
+Systematic Literature Review of AI‑Driven Intelligent Tutoring Systems in Engineering Education (2025)
+
+Neuro‑Symbolic, Multi‑Modal Intelligent Tutoring Systems for Adaptive Learning (2025)
+
+Human‑Like Explanations in AI‑Based Educational Tools (2025)
+
+🖼️ Screenshot & Context Analysis
+ScreenQA: Large‑Scale Question‑Answer Pairs Over Mobile App Screenshots (2025)
+
+ScreenGuard: A Screen‑Targeted Watermarking Scheme Against Arbitrary Screenshot (2025)
+
+CASE: Context‑Aware Screen‑Based Estimation of Gaze (2025)
+
+📊 Multimodal & Input Fusion
+Multimodal Large Language Models: Developments and Directions (2025)
+
+Multimodal Machine Learning Models for Intelligent Interpretation of Text, Image and Audio Inputs (2025)
+
+Multimodality of AI for Education: Toward Artificial General Intelligence (2025)
