@@ -12,60 +12,85 @@
 <?import javafx.geometry.Insets?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.sniptutor.ChatController"
-            prefWidth="750" prefHeight="550"
-            style="-fx-background-color: #1e1f20; -fx-font-family: 'Segoe UI', sans-serif;">
+            prefWidth="950" prefHeight="650"
+            style="-fx-background-color: #131314; -fx-font-family: 'Segoe UI', sans-serif;">
     
-    <!-- Top Header Bar -->
-    <top>
-        <ToolBar style="-fx-background-color: #2b2c2f; -fx-padding: 8px 15px;">
-            <Label text="✨ SnipTutor AI" style="-fx-text-fill: #e3e3e3; -fx-font-size: 14px; -fx-font-weight: bold;"/>
-            <HBox HBox.hgrow="ALWAYS" />
-            <Button text="📸 Snip" onAction="#activateSnippingTool"
-                    style="-fx-background-color: #37393b; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
-            <Button fx:id="btnStudent" text="🎓 Student Mode" onAction="#toggleStudentMode"
-                    style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
-            <Button fx:id="btnDeveloper" text="💻 Developer Mode" onAction="#toggleDeveloperMode"
-                    style="-fx-background-color: #37393b; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;"/>
-        </ToolBar>
-    </top>
-
-    <!-- Center Chat Scroll Area -->
-    <center>
-        <ScrollPane fitToWidth="true" style="-fx-background: #1e1f20; -fx-border-color: transparent;">
-            <content>
-                <VBox fx:id="chatBox" spacing="12">
-                    <padding>
-                        <Insets top="15" right="20" bottom="15" left="20"/>
-                    </padding>
-                </VBox>
-            </content>
-        </ScrollPane>
-    </center>
-
-    <!-- Bottom Gemini-Style Prompt Box -->
-    <bottom>
-        <VBox spacing="6" style="-fx-background-color: #1e1f20; -fx-padding: 10px 20px 20px 20px;">
+    <!-- LEFT SIDEBAR (Gemini Style) -->
+    <left>
+        <VBox prefWidth="240" spacing="12" style="-fx-background-color: #1e1f20; -fx-padding: 14px 10px; -fx-border-color: #2b2c2f; -fx-border-width: 0 1 0 0;">
             
-            <!-- Gemini-Style Input Container Box -->
-            <VBox style="-fx-background-color: #2b2c2f; -fx-background-radius: 20px; -fx-padding: 8px 14px; -fx-border-color: #3c4043; -fx-border-radius: 20px;">
-                
-                <!-- Attached Screenshot Preview Chip (hidden when no image) -->
-                <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
-                      style="-fx-background-color: #37393b; -fx-background-radius: 10px; -fx-padding: 4px 8px; -fx-max-width: 180;">
-                    <ImageView fx:id="previewImageView" fitWidth="40" fitHeight="30" preserveRatio="true"/>
-                    <Label text="Screenshot.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;"/>
-                    <Button text="✕" onAction="#removeAttachedImage"
-                            style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 0 0 0 5;"/>
-                </HBox>
+            <!-- App Branding -->
+            <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 0 6px 6px 6px;">
+                <Label text="✨ SnipTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+            </HBox>
 
-                <!-- Input Text & Action Buttons -->
-                <HBox alignment="CENTER_LEFT" spacing="8">
-                    <TextField fx:id="userInput" promptText="Ask SnipTutor anything..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
-                               style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 13px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
-                    <Button text="➤" onAction="#sendMessage"
-                            style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 13px; -fx-cursor: hand; -fx-min-width: 32px; -fx-min-height: 32px;"/>
-                </HBox>
-            </VBox>
+            <!-- ➕ New Chat Button -->
+            <Button text="➕  New Chat" onAction="#createNewChat" maxWidth="Infinity"
+                    style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 20; -fx-padding: 10 16; -fx-font-size: 13px; -fx-cursor: hand; -fx-alignment: CENTER_LEFT;"/>
+
+            <Label text="Recent Conversations" style="-fx-text-fill: #8e918f; -fx-font-size: 11px; -fx-padding: 8 6 0 6;"/>
+
+            <!-- List of Saved Conversations -->
+            <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: #1e1f20; -fx-border-color: transparent;">
+                <VBox fx:id="conversationsListBox" spacing="4" style="-fx-background-color: #1e1f20;"/>
+            </ScrollPane>
         </VBox>
-    </bottom>
+    </left>
+
+    <!-- RIGHT MAIN CHAT AREA -->
+    <center>
+        <BorderPane style="-fx-background-color: #131314;">
+            <!-- Header Toolbar -->
+            <top>
+                <ToolBar style="-fx-background-color: #1e1f20; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-width: 0 0 1 0;">
+                    <Label fx:id="currentChatTitleLabel" text="New Chat" style="-fx-text-fill: #e3e3e3; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+                    <HBox HBox.hgrow="ALWAYS" />
+                    <Button text="📸 Snip (Ctrl+Shift+Space)" onAction="#activateSnippingTool"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                    <Button fx:id="btnStudent" text="🎓 Student" onAction="#toggleStudentMode"
+                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                    <Button fx:id="btnDeveloper" text="💻 Developer" onAction="#toggleDeveloperMode"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                </ToolBar>
+            </top>
+
+            <!-- Messages Stream -->
+            <center>
+                <ScrollPane fx:id="chatScrollPane" fitToWidth="true" style="-fx-background: #131314; -fx-border-color: transparent;">
+                    <content>
+                        <VBox fx:id="chatBox" spacing="14">
+                            <padding>
+                                <Insets top="20" right="30" bottom="20" left="30"/>
+                            </padding>
+                        </VBox>
+                    </content>
+                </ScrollPane>
+            </center>
+
+            <!-- Bottom Prompt Box -->
+            <bottom>
+                <VBox spacing="6" style="-fx-background-color: #131314; -fx-padding: 10px 30px 20px 30px;">
+                    <VBox style="-fx-background-color: #1e1f20; -fx-background-radius: 24px; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 24px;">
+                        
+                        <!-- Attached Screenshot Preview Chip -->
+                        <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
+                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 12px; -fx-padding: 6px 10px; -fx-max-width: 200;">
+                            <ImageView fx:id="previewImageView" fitWidth="44" fitHeight="34" preserveRatio="true"/>
+                            <Label text="Screenshot.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;"/>
+                            <Button text="✕" onAction="#removeAttachedImage"
+                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand;"/>
+                        </HBox>
+
+                        <!-- Input TextField and Action Buttons -->
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <TextField fx:id="userInput" promptText="Ask SnipTutor a question or request code help..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
+                                       style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 14px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
+                            <Button text="➤" onAction="#sendMessage"
+                                    style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 13px; -fx-cursor: hand; -fx-min-width: 36px; -fx-min-height: 36px;"/>
+                        </HBox>
+                    </VBox>
+                </VBox>
+            </bottom>
+        </BorderPane>
+    </center>
 </BorderPane>

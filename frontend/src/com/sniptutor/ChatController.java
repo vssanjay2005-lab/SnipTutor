@@ -2,22 +2,28 @@ package com.sniptutor;
 
 import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.scene.control.TextField;
-import javafx.scene.control.Button;
-import javafx.scene.layout.VBox;
-import javafx.scene.layout.HBox;
-import javafx.scene.control.Label;
+import javafx.geometry.Pos;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import java.net.http.*;
+import javafx.scene.layout.*;
+import javafx.stage.Stage;
+
 import java.net.URI;
+import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 public class ChatController {
     @FXML private TextField userInput;
     @FXML private VBox chatBox;
+    @FXML private ScrollPane chatScrollPane;
+    @FXML private VBox conversationsListBox;
+    @FXML private Label currentChatTitleLabel;
     @FXML private HBox imagePreviewContainer;
     @FXML private ImageView previewImageView;
     @FXML private Button btnStudent;
@@ -26,8 +32,113 @@ public class ChatController {
     private final HttpClient client = HttpClient.newHttpClient();
     private static final String BACKEND_URL = "http://127.0.0.1:8000";
 
+    private final List<Conversation> conversations = new ArrayList<>();
+    private Conversation currentConversation;
     private Path attachedImagePath = null;
-    private String currentMode = "Student"; // "Student" or "Developer"
+    private String currentMode = "Student";
+    private Stage stage;
+
+    public void setStage(Stage stage) {
+        this.stage = stage;
+    }
+
+    @FXML
+    public void initialize() {
+        // Create initial default chat
+        createNewChat();
+    }
+
+    @FXML
+    public void createNewChat() {
+        Conversation newConv = new Conversation("Chat " + (conversations.size() + 1));
+        conversations.add(0, newConv);
+        selectConversation(newConv);
+    }
+
+    private void selectConversation(Conversation conv) {
+        this.currentConversation = conv;
+        currentChatTitleLabel.setText(conv.getTitle());
+        renderConversationsList();
+        renderCurrentChatMessages();
+    }
+
+    private void renderConversationsList() {
+        conversationsListBox.getChildren().clear();
+        for (Conversation conv : conversations) {
+            HBox item = new HBox(8);
+            item.setAlignment(Pos.CENTER_LEFT);
+            boolean isSelected = (conv == currentConversation);
+            item.setStyle("-fx-background-color: " + (isSelected ? "#2b2c2f" : "transparent") + "; " +
+                          "-fx-background-radius: 12px; -fx-padding: 8px 10px; -fx-cursor: hand;");
+
+            Label titleLabel = new Label(conv.getTitle());
+            titleLabel.setStyle("-fx-text-fill: " + (isSelected ? "#ffffff" : "#c4c7c5") + "; -fx-font-size: 12px;");
+            HBox.setHgrow(titleLabel, Priority.ALWAYS);
+            titleLabel.setMaxWidth(130);
+
+            // Rename button
+            Button renameBtn = new Button("✏️");
+            renameBtn.setStyle("-fx-background-color: transparent; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0;");
+            renameBtn.setOnAction(e -> renameConversation(conv));
+
+            // Delete button
+            Button deleteBtn = new Button("🗑️");
+            deleteBtn.setStyle("-fx-background-color: transparent; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0;");
+            deleteBtn.setOnAction(e -> deleteConversation(conv));
+
+            item.setOnMouseClicked(e -> {
+                if (e.getTarget() != renameBtn && e.getTarget() != deleteBtn) {
+                    selectConversation(conv);
+                }
+            });
+
+            item.getChildren().addAll(titleLabel, renameBtn, deleteBtn);
+            conversationsListBox.getChildren().add(item);
+        }
+    }
+
+    private void renameConversation(Conversation conv) {
+        TextInputDialog dialog = new TextInputDialog(conv.getTitle());
+        dialog.setTitle("Rename Conversation");
+        dialog.setHeaderText(null);
+        dialog.setContentText("Enter new title:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(newTitle -> {
+            if (!newTitle.trim().isEmpty()) {
+                conv.setTitle(newTitle.trim());
+                if (conv == currentConversation) {
+                    currentChatTitleLabel.setText(conv.getTitle());
+                }
+                renderConversationsList();
+            }
+        });
+    }
+
+    private void deleteConversation(Conversation conv) {
+        if (conversations.size() <= 1) {
+            // Keep at least one chat
+            conv.getMessages().clear();
+            conv.setTitle("New Chat");
+            selectConversation(conv);
+            return;
+        }
+        conversations.remove(conv);
+        if (currentConversation == conv) {
+            selectConversation(conversations.get(0));
+        } else {
+            renderConversationsList();
+        }
+    }
+
+    private void renderCurrentChatMessages() {
+        chatBox.getChildren().clear();
+        if (currentConversation != null) {
+            for (ChatMessage msg : currentConversation.getMessages()) {
+                displayMessageBubble(msg.getSender(), msg.getText(), msg.getImagePath());
+            }
+        }
+    }
 
     @FXML
     private void sendMessage() {
@@ -40,24 +151,45 @@ public class ChatController {
         String query = hasText ? text.trim() : "";
         userInput.clear();
 
-        // 1. If an image is attached, send to /process-image/
+        // Auto-title conversation on first message
+        if (currentConversation.getMessages().isEmpty() && hasText) {
+            String autoTitle = query.length() > 20 ? query.substring(0, 20) + "..." : query;
+            currentConversation.setTitle(autoTitle);
+            currentChatTitleLabel.setText(autoTitle);
+            renderConversationsList();
+        }
+
+        String historyContext = buildHistoryContext();
+
         if (hasImage) {
             Path imageToSend = attachedImagePath;
-            removeAttachedImage(); // clear preview
+            String imagePathStr = imageToSend.toUri().toString();
+            removeAttachedImage();
 
-            addMessage("You: " + (query.isEmpty() ? "📷 [Uploaded Screenshot]" : "📷 [Screenshot] " + query), "#8ab4f8");
-            sendImageWithPromptToBackend(imageToSend, query);
-        } 
-        // 2. Otherwise send normal text to /process-text/
-        else {
-            addMessage("You: " + query, "#8ab4f8");
-            sendTextToBackend(query);
+            currentConversation.addMessage("You", query.isEmpty() ? "[Uploaded Screenshot]" : query, imagePathStr);
+            displayMessageBubble("You", query.isEmpty() ? "[Uploaded Screenshot]" : query, imagePathStr);
+
+            sendImageToBackend(imageToSend, query, historyContext);
+        } else {
+            currentConversation.addMessage("You", query, null);
+            displayMessageBubble("You", query, null);
+
+            sendTextToBackend(query, historyContext);
         }
     }
 
-    private void sendTextToBackend(String query) {
-        String promptWithMode = "[" + currentMode + " Mode] " + query;
-        String jsonPayload = "{\"text\":" + escapeJson(promptWithMode) + "}";
+    private String buildHistoryContext() {
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage msg : currentConversation.getMessages()) {
+            sb.append(msg.getSender()).append(": ").append(msg.getText()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private void sendTextToBackend(String query, String history) {
+        String jsonPayload = "{\"text\":" + escapeJson(query) + 
+                             ",\"history\":" + escapeJson(history) + 
+                             ",\"mode\":" + escapeJson(currentMode) + "}";
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BACKEND_URL + "/process-text/"))
@@ -73,35 +205,48 @@ public class ChatController {
                     String error = extractJsonField(body, "error");
                     reply = (error != null) ? "Error: " + error : body;
                 }
-                addMessage("Gemini: " + reply, "#e3e3e3");
+                final String finalReply = reply;
+                Platform.runLater(() -> {
+                    currentConversation.addMessage("SnipTutor", finalReply, null);
+                    displayMessageBubble("SnipTutor", finalReply, null);
+                });
             })
             .exceptionally(e -> {
-                addMessage("Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()) 
-                    + "\n(Make sure FastAPI backend is running on http://127.0.0.1:8000)", "#f28b82");
+                Platform.runLater(() -> {
+                    String err = "Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                    displayMessageBubble("SnipTutor", err, null);
+                });
                 return null;
             });
     }
 
-    private void sendImageWithPromptToBackend(Path filePath, String optionalPrompt) {
+    private void sendImageToBackend(Path filePath, String optionalPrompt, String history) {
         try {
             String boundary = "----SnipTutorBoundary" + System.currentTimeMillis();
             String CRLF = "\r\n";
 
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
 
-            // 1. Add "prompt" form field (the user's question)
+            // Prompt
             if (optionalPrompt != null && !optionalPrompt.trim().isEmpty()) {
                 out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
                 out.write(("Content-Disposition: form-data; name=\"prompt\"" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
                 out.write((optionalPrompt.trim() + CRLF).getBytes(StandardCharsets.UTF_8));
             }
 
-            // 2. Add "mode" form field (Student or Developer)
+            // Mode
             out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(("Content-Disposition: form-data; name=\"mode\"" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write((currentMode + CRLF).getBytes(StandardCharsets.UTF_8));
 
-            // 3. Add "file" form field (the screenshot image)
+            // History
+            if (history != null && !history.trim().isEmpty()) {
+                out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
+                out.write(("Content-Disposition: form-data; name=\"history\"" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
+                out.write((history.trim() + CRLF).getBytes(StandardCharsets.UTF_8));
+            }
+
+            // File
             out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + filePath.getFileName() + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(("Content-Type: image/png" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
@@ -119,32 +264,65 @@ public class ChatController {
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenAccept(response -> {
                     String body = response.body();
-                    String extracted = extractJsonField(body, "extracted_text");
                     String gemini = extractJsonField(body, "gemini_response");
-                    if (gemini != null) {
-                        if (extracted != null && !extracted.trim().isEmpty()) {
-                            addMessage("📝 Extracted Text:\n" + extracted.trim(), "#c58af9");
-                        }
-                        addMessage("Gemini: " + gemini, "#e3e3e3");
-                    } else {
-                        String error = extractJsonField(body, "error");
-                        addMessage("Error: " + (error != null ? error : body), "#f28b82");
-                    }
+                    String reply = (gemini != null) ? gemini : extractJsonField(body, "error");
+                    if (reply == null) reply = body;
+
+                    final String finalReply = reply;
+                    Platform.runLater(() -> {
+                        currentConversation.addMessage("SnipTutor", finalReply, null);
+                        displayMessageBubble("SnipTutor", finalReply, null);
+                    });
                 })
                 .exceptionally(e -> {
-                    addMessage("Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()), "#f28b82");
+                    Platform.runLater(() -> {
+                        displayMessageBubble("SnipTutor", "Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()), null);
+                    });
                     return null;
                 });
 
         } catch (Exception e) {
-            addMessage("Error uploading screenshot: " + e.getMessage(), "#f28b82");
+            displayMessageBubble("SnipTutor", "Error uploading screenshot: " + e.getMessage(), null);
         }
     }
 
-    private javafx.stage.Stage stage;
+    private void displayMessageBubble(String sender, String text, String imagePath) {
+        boolean isUser = sender.equals("You");
 
-    public void setStage(javafx.stage.Stage stage) {
-        this.stage = stage;
+        VBox bubbleContainer = new VBox(6);
+        bubbleContainer.setAlignment(isUser ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+
+        // Header (Sender Name)
+        Label senderLabel = new Label(isUser ? "You" : "✨ SnipTutor");
+        senderLabel.setStyle("-fx-text-fill: " + (isUser ? "#8ab4f8" : "#c58af9") + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+
+        // Message Box
+        VBox messageBox = new VBox(8);
+        messageBox.setMaxWidth(550);
+        messageBox.setStyle("-fx-background-color: " + (isUser ? "#2b2c2f" : "#1e1f20") + "; " +
+                            "-fx-background-radius: 16px; -fx-padding: 12px 16px; " +
+                            "-fx-border-color: " + (isUser ? "#3c4043" : "#2b2c2f") + "; -fx-border-radius: 16px;");
+
+        if (imagePath != null && !imagePath.isEmpty()) {
+            try {
+                ImageView iv = new ImageView(new Image(imagePath));
+                iv.setFitWidth(200);
+                iv.setPreserveRatio(true);
+                iv.setStyle("-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 6, 0, 0, 2);");
+                messageBox.getChildren().add(iv);
+            } catch (Exception ignored) {}
+        }
+
+        Label contentLabel = new Label(text);
+        contentLabel.setWrapText(true);
+        contentLabel.setStyle("-fx-text-fill: #e3e3e3; -fx-font-size: 13px; -fx-line-spacing: 3px;");
+        messageBox.getChildren().add(contentLabel);
+
+        bubbleContainer.getChildren().addAll(senderLabel, messageBox);
+        chatBox.getChildren().add(bubbleContainer);
+
+        // Scroll to bottom
+        chatScrollPane.setVvalue(1.0);
     }
 
     @FXML
@@ -173,29 +351,18 @@ public class ChatController {
         imagePreviewContainer.setManaged(false);
     }
 
-    private void addMessage(String msg, String colorHex) {
-        Platform.runLater(() -> {
-            Label label = new Label(msg);
-            label.setWrapText(true);
-            label.setStyle("-fx-text-fill: " + colorHex + "; -fx-font-size: 13px; -fx-padding: 4px 8px; -fx-background-color: #2b2c2f; -fx-background-radius: 8px;");
-            chatBox.getChildren().add(label);
-        });
-    }
-
     @FXML
     private void toggleStudentMode() {
         currentMode = "Student";
         btnStudent.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;");
-        btnDeveloper.setStyle("-fx-background-color: #37393b; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;");
-        addMessage("🎓 Switched to Student Mode: Explanations will be simple and easy to understand.", "#81c995");
+        btnDeveloper.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;");
     }
 
     @FXML
     private void toggleDeveloperMode() {
         currentMode = "Developer";
         btnDeveloper.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;");
-        btnStudent.setStyle("-fx-background-color: #37393b; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;");
-        addMessage("💻 Switched to Developer Mode: Explanations will be technical with code snippets.", "#81c995");
+        btnStudent.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;");
     }
 
     private String escapeJson(String raw) {

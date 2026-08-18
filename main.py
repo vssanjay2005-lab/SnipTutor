@@ -30,6 +30,8 @@ app.add_middleware(
 
 class TextInput(BaseModel):
     text: str
+    history: Optional[str] = None
+    mode: Optional[str] = "Student"
 
 def call_gemini(prompt: str) -> str:
     models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash"]
@@ -53,10 +55,26 @@ def read_root():
 
 @app.post("/process-text/")
 def process_text(input: TextInput):
-    user_text = input.text
     try:
-        response_text = call_gemini(user_text)
-        return {"input": user_text, "gemini_response": response_text}
+        mode_instruction = (
+            "Explain in simple, beginner-friendly terms with clear intuition."
+            if input.mode == "Student"
+            else "Provide technical, concise, developer-focused solutions with code snippets."
+        )
+        
+        context_prompt = f"""You are SnipTutor AI Assistant operating in {input.mode} Mode.
+Style instruction: {mode_instruction}
+
+--- CONVERSATION HISTORY ---
+{input.history if input.history else "[Start of conversation]"}
+
+--- USER LATEST QUESTION ---
+{input.text}
+
+Please provide your answer as SnipTutor:"""
+
+        response_text = call_gemini(context_prompt)
+        return {"input": input.text, "gemini_response": response_text}
     except Exception as e:
         return {"error": str(e)}
 
@@ -64,19 +82,17 @@ def process_text(input: TextInput):
 async def process_image(
     file: UploadFile = File(...),
     prompt: Optional[str] = Form(None),
-    mode: Optional[str] = Form("Student")
+    mode: Optional[str] = Form("Student"),
+    history: Optional[str] = Form(None)
 ):
     try:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 1. OCR to extract text from the screenshot
         extracted_text = pytesseract.image_to_string(img).strip()
+        user_question = prompt.strip() if (prompt and prompt.strip()) else "Please analyze and explain what is shown in this screenshot."
 
-        # 2. Build contextual prompt combining screenshot text + user question + mode
-        user_question = prompt.strip() if (prompt and prompt.strip()) else "Please analyze and explain what is in this screenshot."
-        
         mode_instruction = (
             "Explain in simple, beginner-friendly terms with clear intuition."
             if mode == "Student"
@@ -86,13 +102,16 @@ async def process_image(
         full_prompt = f"""You are SnipTutor AI Assistant operating in {mode} Mode.
 Style instruction: {mode_instruction}
 
---- SCREENSHOT CONTENT (OCR Extracted) ---
+--- CONVERSATION HISTORY ---
+{history if history else "[Start of conversation]"}
+
+--- NEW SCREENSHOT OCR CONTENT ---
 {extracted_text if extracted_text else "[No readable text found in image - analyze visual structure if applicable]"}
 
---- USER QUESTION ---
+--- USER QUESTION ABOUT SCREENSHOT ---
 {user_question}
 
-Please answer the user's question directly and accurately based on the screenshot provided above."""
+Please provide your answer as SnipTutor directly addressing the user's question:"""
 
         response_text = call_gemini(full_prompt)
 
