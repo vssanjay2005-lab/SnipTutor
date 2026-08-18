@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ToolBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.sniptutor.ChatController"
+            prefWidth="750" prefHeight="550"
+            style="-fx-background-color: #1e1f20; -fx-font-family: 'Segoe UI', sans-serif;">
+    
+    <!-- Top Header Bar -->
+    <top>
+        <ToolBar style="-fx-background-color: #2b2c2f; -fx-padding: 8px 15px;">
+            <Label text="✨ SnipTutor AI" style="-fx-text-fill: #e3e3e3; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+            <HBox HBox.hgrow="ALWAYS" />
+            <Button text="📸 Snip" onAction="#activateSnippingTool"
+                    style="-fx-background-color: #37393b; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+            <Button fx:id="btnStudent" text="🎓 Student Mode" onAction="#toggleStudentMode"
+                    style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+            <Button fx:id="btnDeveloper" text="💻 Developer Mode" onAction="#toggleDeveloperMode"
+                    style="-fx-background-color: #37393b; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;"/>
+        </ToolBar>
+    </top>
+
+    <!-- Center Chat Scroll Area -->
+    <center>
+        <ScrollPane fitToWidth="true" style="-fx-background: #1e1f20; -fx-border-color: transparent;">
+            <content>
+                <VBox fx:id="chatBox" spacing="12">
+                    <padding>
+                        <Insets top="15" right="20" bottom="15" left="20"/>
+                    </padding>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+    <!-- Bottom Gemini-Style Prompt Box -->
+    <bottom>
+        <VBox spacing="6" style="-fx-background-color: #1e1f20; -fx-padding: 10px 20px 20px 20px;">
+            
+            <!-- Gemini-Style Input Container Box -->
+            <VBox style="-fx-background-color: #2b2c2f; -fx-background-radius: 20px; -fx-padding: 8px 14px; -fx-border-color: #3c4043; -fx-border-radius: 20px;">
+                
+                <!-- Attached Screenshot Preview Chip (hidden when no image) -->
+                <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
+                      style="-fx-background-color: #37393b; -fx-background-radius: 10px; -fx-padding: 4px 8px; -fx-max-width: 180;">
+                    <ImageView fx:id="previewImageView" fitWidth="40" fitHeight="30" preserveRatio="true"/>
+                    <Label text="Screenshot.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;"/>
+                    <Button text="✕" onAction="#removeAttachedImage"
+                            style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 0 0 0 5;"/>
+                </HBox>
+
+                <!-- Input Text & Action Buttons -->
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <TextField fx:id="userInput" promptText="Ask SnipTutor anything..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
+                               style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 13px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
+                    <Button text="➤" onAction="#sendMessage"
+                            style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 13px; -fx-cursor: hand; -fx-min-width: 32px; -fx-min-height: 32px;"/>
+                </HBox>
+            </VBox>
+        </VBox>
+    </bottom>
+</BorderPane>

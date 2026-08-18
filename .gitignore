@@ -1,0 +1,18 @@
+﻿# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.class
+
+# Java build output
+frontend/bin/
+*.class
+
+# Temporary screenshots and logs
+screenshot.png
+*.log
+
+# IDE settings
+.vscode/
