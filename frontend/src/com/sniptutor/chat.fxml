@@ -40,17 +40,29 @@
     <!-- RIGHT MAIN CHAT AREA -->
     <center>
         <BorderPane style="-fx-background-color: #131314;">
-            <!-- Header Toolbar -->
+            <!-- Header Toolbar: Snipping Tool + AI Mode Control Center -->
             <top>
                 <ToolBar style="-fx-background-color: #1e1f20; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-width: 0 0 1 0;">
                     <Label fx:id="currentChatTitleLabel" text="New Chat" style="-fx-text-fill: #e3e3e3; -fx-font-size: 14px; -fx-font-weight: bold;"/>
                     <HBox HBox.hgrow="ALWAYS" />
-                    <Button text="📸 Snip (Ctrl+Shift+Space)" onAction="#activateSnippingTool"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                    
+                    <!-- Snipping Tool Action Center -->
+                    <Button text="📸 New Snip" onAction="#activateSnippingTool"
+                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 12;"/>
+                    <Button fx:id="btnTopCopy" text="📋 Copy" onAction="#copyAttachedImageToClipboard"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #8ab4f8; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
+                    <Button fx:id="btnTopSave" text="💾 Save As" onAction="#saveAttachedImageAs"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #81c995; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
+                    <Button text="📂 My Snips" onAction="#openSnipsFolder"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
+                    
+                    <Label text="|" style="-fx-text-fill: #3c4043; -fx-padding: 0 4;"/>
+                    
+                    <!-- AI Mode Switcher -->
                     <Button fx:id="btnStudent" text="🎓 Student" onAction="#toggleStudentMode"
-                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
                     <Button fx:id="btnDeveloper" text="💻 Developer" onAction="#toggleDeveloperMode"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand;"/>
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
                 </ToolBar>
             </top>
 
@@ -72,20 +84,13 @@
                 <VBox spacing="6" style="-fx-background-color: #131314; -fx-padding: 10px 30px 20px 30px;">
                     <VBox style="-fx-background-color: #1e1f20; -fx-background-radius: 24px; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 24px;">
                         
-                        <!-- Attached Screenshot Preview Chip with Dual-Purpose Action Buttons -->
-                        <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="10"
-                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 12px; -fx-padding: 6px 12px; -fx-max-width: 440;">
-                            <ImageView fx:id="previewImageView" fitWidth="44" fitHeight="34" preserveRatio="true"/>
+                        <!-- Attached Screenshot Preview Chip -->
+                        <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
+                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 12px; -fx-padding: 5px 10px; -fx-max-width: 220;">
+                            <ImageView fx:id="previewImageView" fitWidth="40" fitHeight="30" preserveRatio="true"/>
                             <Label fx:id="previewImageNameLabel" text="Snip_Capture.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;" HBox.hgrow="ALWAYS"/>
-                            
-                            <Button text="📋 Copy" onAction="#copyAttachedImageToClipboard"
-                                    style="-fx-background-color: #37393b; -fx-text-fill: #8ab4f8; -fx-font-size: 11px; -fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 3 8;"/>
-                            <Button text="💾 Save As" onAction="#saveAttachedImageAs"
-                                    style="-fx-background-color: #37393b; -fx-text-fill: #81c995; -fx-font-size: 11px; -fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 3 8;"/>
-                            <Button text="📂 View" onAction="#openAttachedImageInViewer"
-                                    style="-fx-background-color: #37393b; -fx-text-fill: #e3e3e3; -fx-font-size: 11px; -fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 3 8;"/>
                             <Button text="✕" onAction="#removeAttachedImage"
-                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand;"/>
+                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 0 2;"/>
                         </HBox>
 
                         <!-- Input TextField and Action Buttons -->

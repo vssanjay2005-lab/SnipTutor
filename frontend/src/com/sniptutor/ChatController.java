@@ -27,6 +27,8 @@ public class ChatController {
     @FXML private HBox imagePreviewContainer;
     @FXML private ImageView previewImageView;
     @FXML private Label previewImageNameLabel;
+    @FXML private Button btnTopCopy;
+    @FXML private Button btnTopSave;
     @FXML private Button btnStudent;
     @FXML private Button btnDeveloper;
 
@@ -369,18 +371,47 @@ public class ChatController {
         overlay.show();
     }
 
+    private Path getActiveOrLatestSnippetPath() {
+        if (attachedImagePath != null && Files.exists(attachedImagePath)) {
+            return attachedImagePath;
+        }
+        java.io.File localScreenshot = new java.io.File("screenshot.png");
+        if (localScreenshot.exists()) {
+            return localScreenshot.toPath();
+        }
+        String userHome = System.getProperty("user.home");
+        java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
+        if (snipDir.exists() && snipDir.isDirectory()) {
+            java.io.File[] files = snipDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".png"));
+            if (files != null && files.length > 0) {
+                java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                return files[0].toPath();
+            }
+        }
+        return null;
+    }
+
     @FXML
     private void copyAttachedImageToClipboard() {
-        if (attachedImagePath == null) return;
+        Path targetPath = getActiveOrLatestSnippetPath();
+        if (targetPath == null) return;
         try {
-            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(attachedImagePath.toFile());
+            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(targetPath.toFile());
             if (img != null) {
                 java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(new TransferableImage(img), null);
-                if (previewImageNameLabel != null) {
+                
+                if (btnTopCopy != null) {
+                    btnTopCopy.setText("✅ Copied!");
+                    new Thread(() -> {
+                        try { Thread.sleep(1500); } catch (Exception ignored) {}
+                        Platform.runLater(() -> btnTopCopy.setText("📋 Copy"));
+                    }).start();
+                }
+                if (previewImageNameLabel != null && attachedImagePath != null) {
                     previewImageNameLabel.setText("✅ Copied to Clipboard!");
                     new Thread(() -> {
-                        try { Thread.sleep(2000); } catch (Exception ignored) {}
+                        try { Thread.sleep(1500); } catch (Exception ignored) {}
                         Platform.runLater(() -> {
                             if (attachedImagePath != null && previewImageNameLabel != null) {
                                 previewImageNameLabel.setText(attachedImagePath.getFileName().toString());
@@ -396,11 +427,12 @@ public class ChatController {
 
     @FXML
     private void saveAttachedImageAs() {
-        if (attachedImagePath == null) return;
+        Path targetPath = getActiveOrLatestSnippetPath();
+        if (targetPath == null) return;
         try {
             javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
             fileChooser.setTitle("Save Snippet");
-            fileChooser.setInitialFileName(attachedImagePath.getFileName().toString());
+            fileChooser.setInitialFileName(targetPath.getFileName().toString());
             fileChooser.getExtensionFilters().addAll(
                 new javafx.stage.FileChooser.ExtensionFilter("PNG Image (*.png)", "*.png"),
                 new javafx.stage.FileChooser.ExtensionFilter("JPEG Image (*.jpg)", "*.jpg"),
@@ -408,16 +440,12 @@ public class ChatController {
             );
             java.io.File dest = fileChooser.showSaveDialog(stage);
             if (dest != null) {
-                Files.copy(attachedImagePath, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                if (previewImageNameLabel != null) {
-                    previewImageNameLabel.setText("💾 Saved to: " + dest.getName());
+                Files.copy(targetPath, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                if (btnTopSave != null) {
+                    btnTopSave.setText("💾 Saved!");
                     new Thread(() -> {
-                        try { Thread.sleep(2000); } catch (Exception ignored) {}
-                        Platform.runLater(() -> {
-                            if (attachedImagePath != null && previewImageNameLabel != null) {
-                                previewImageNameLabel.setText(attachedImagePath.getFileName().toString());
-                            }
-                        });
+                        try { Thread.sleep(1500); } catch (Exception ignored) {}
+                        Platform.runLater(() -> btnTopSave.setText("💾 Save As"));
                     }).start();
                 }
             }
@@ -427,11 +455,26 @@ public class ChatController {
     }
 
     @FXML
+    private void openSnipsFolder() {
+        try {
+            String userHome = System.getProperty("user.home");
+            java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
+            if (!snipDir.exists()) snipDir.mkdirs();
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(snipDir);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
     private void openAttachedImageInViewer() {
-        if (attachedImagePath == null) return;
+        Path targetPath = getActiveOrLatestSnippetPath();
+        if (targetPath == null) return;
         try {
             if (java.awt.Desktop.isDesktopSupported()) {
-                java.awt.Desktop.getDesktop().open(attachedImagePath.toFile());
+                java.awt.Desktop.getDesktop().open(targetPath.toFile());
             }
         } catch (Exception e) {
             e.printStackTrace();
