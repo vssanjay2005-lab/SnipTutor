@@ -26,6 +26,7 @@ public class ChatController {
     @FXML private Label currentChatTitleLabel;
     @FXML private HBox imagePreviewContainer;
     @FXML private ImageView previewImageView;
+    @FXML private Label previewImageNameLabel;
     @FXML private Button btnStudent;
     @FXML private Button btnDeveloper;
 
@@ -352,6 +353,9 @@ public class ChatController {
         SnippingOverlay overlay = new SnippingOverlay(capturedFile -> {
             attachedImagePath = capturedFile.toPath();
             previewImageView.setImage(new Image(capturedFile.toURI().toString()));
+            if (previewImageNameLabel != null) {
+                previewImageNameLabel.setText(capturedFile.getName());
+            }
             imagePreviewContainer.setVisible(true);
             imagePreviewContainer.setManaged(true);
             if (stage != null) {
@@ -366,9 +370,81 @@ public class ChatController {
     }
 
     @FXML
+    private void copyAttachedImageToClipboard() {
+        if (attachedImagePath == null) return;
+        try {
+            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(attachedImagePath.toFile());
+            if (img != null) {
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new TransferableImage(img), null);
+                if (previewImageNameLabel != null) {
+                    previewImageNameLabel.setText("✅ Copied to Clipboard!");
+                    new Thread(() -> {
+                        try { Thread.sleep(2000); } catch (Exception ignored) {}
+                        Platform.runLater(() -> {
+                            if (attachedImagePath != null && previewImageNameLabel != null) {
+                                previewImageNameLabel.setText(attachedImagePath.getFileName().toString());
+                            }
+                        });
+                    }).start();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    private void saveAttachedImageAs() {
+        if (attachedImagePath == null) return;
+        try {
+            javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+            fileChooser.setTitle("Save Snippet");
+            fileChooser.setInitialFileName(attachedImagePath.getFileName().toString());
+            fileChooser.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("PNG Image (*.png)", "*.png"),
+                new javafx.stage.FileChooser.ExtensionFilter("JPEG Image (*.jpg)", "*.jpg"),
+                new javafx.stage.FileChooser.ExtensionFilter("All Files", "*.*")
+            );
+            java.io.File dest = fileChooser.showSaveDialog(stage);
+            if (dest != null) {
+                Files.copy(attachedImagePath, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                if (previewImageNameLabel != null) {
+                    previewImageNameLabel.setText("💾 Saved to: " + dest.getName());
+                    new Thread(() -> {
+                        try { Thread.sleep(2000); } catch (Exception ignored) {}
+                        Platform.runLater(() -> {
+                            if (attachedImagePath != null && previewImageNameLabel != null) {
+                                previewImageNameLabel.setText(attachedImagePath.getFileName().toString());
+                            }
+                        });
+                    }).start();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    private void openAttachedImageInViewer() {
+        if (attachedImagePath == null) return;
+        try {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(attachedImagePath.toFile());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
     private void removeAttachedImage() {
         attachedImagePath = null;
         previewImageView.setImage(null);
+        if (previewImageNameLabel != null) {
+            previewImageNameLabel.setText("");
+        }
         imagePreviewContainer.setVisible(false);
         imagePreviewContainer.setManaged(false);
     }

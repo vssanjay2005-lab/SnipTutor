@@ -116,14 +116,61 @@ public class SnippingOverlay {
             Rectangle area = new Rectangle(x, y, width, height);
             BufferedImage screenCapture = robot.createScreenCapture(area);
 
-            File savedFile = new File("screenshot.png");
-            ImageIO.write(screenCapture, "png", savedFile);
+            // 1. Auto-Copy directly to Windows OS System Clipboard (ready for Ctrl+V in WhatsApp, Discord, Slack, etc.)
+            try {
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new TransferableImage(screenCapture), null);
+            } catch (Exception clipEx) {
+                clipEx.printStackTrace();
+            }
+
+            // 2. Auto-Archive to Pictures/SnipTutor folder with timestamp
+            String userHome = System.getProperty("user.home");
+            File snipDir = new File(userHome, "Pictures/SnipTutor");
+            if (!snipDir.exists()) {
+                snipDir.mkdirs();
+            }
+
+            String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+            File archivedFile = new File(snipDir, "Snip_" + timestamp + ".png");
+            ImageIO.write(screenCapture, "png", archivedFile);
+
+            // 3. Also update active screenshot.png for local temp reference
+            File activeFile = new File("screenshot.png");
+            ImageIO.write(screenCapture, "png", activeFile);
 
             if (onCaptureCallback != null) {
-                Platform.runLater(() -> onCaptureCallback.accept(savedFile));
+                Platform.runLater(() -> onCaptureCallback.accept(archivedFile));
             }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+    }
+}
+
+// Helper class to transfer images directly to Windows OS Clipboard
+class TransferableImage implements java.awt.datatransfer.Transferable {
+    private final java.awt.Image image;
+
+    public TransferableImage(java.awt.Image image) {
+        this.image = image;
+    }
+
+    @Override
+    public java.awt.datatransfer.DataFlavor[] getTransferDataFlavors() {
+        return new java.awt.datatransfer.DataFlavor[]{java.awt.datatransfer.DataFlavor.imageFlavor};
+    }
+
+    @Override
+    public boolean isDataFlavorSupported(java.awt.datatransfer.DataFlavor flavor) {
+        return java.awt.datatransfer.DataFlavor.imageFlavor.equals(flavor);
+    }
+
+    @Override
+    public Object getTransferData(java.awt.datatransfer.DataFlavor flavor) throws java.awt.datatransfer.UnsupportedFlavorException {
+        if (!isDataFlavorSupported(flavor)) {
+            throw new java.awt.datatransfer.UnsupportedFlavorException(flavor);
+        }
+        return image;
     }
 }
