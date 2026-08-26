@@ -69,21 +69,43 @@ public class ChatController {
             item.setAlignment(Pos.CENTER_LEFT);
             boolean isSelected = (conv == currentConversation);
             item.setStyle("-fx-background-color: " + (isSelected ? "#2b2c2f" : "transparent") + "; " +
-                          "-fx-background-radius: 12px; -fx-padding: 8px 10px; -fx-cursor: hand;");
+                          "-fx-background-radius: 10px; -fx-padding: 8px 10px; -fx-cursor: hand;");
 
+            // 1. Chat bubble vector icon
+            javafx.scene.shape.SVGPath chatIcon = new javafx.scene.shape.SVGPath();
+            chatIcon.setContent("M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z");
+            chatIcon.setScaleX(0.55);
+            chatIcon.setScaleY(0.55);
+            chatIcon.setFill(javafx.scene.paint.Color.web(isSelected ? "#8ab4f8" : "#8e918f"));
+
+            // 2. Title Label
             Label titleLabel = new Label(conv.getTitle());
             titleLabel.setStyle("-fx-text-fill: " + (isSelected ? "#ffffff" : "#c4c7c5") + "; -fx-font-size: 12px;");
             HBox.setHgrow(titleLabel, Priority.ALWAYS);
-            titleLabel.setMaxWidth(130);
+            titleLabel.setMaxWidth(110);
 
-            // Rename button
-            Button renameBtn = new Button("✏️");
-            renameBtn.setStyle("-fx-background-color: transparent; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0;");
+            // 3. Rename button with SVG Pencil icon
+            javafx.scene.shape.SVGPath editSvg = new javafx.scene.shape.SVGPath();
+            editSvg.setContent("M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z");
+            editSvg.setScaleX(0.5);
+            editSvg.setScaleY(0.5);
+            editSvg.setFill(javafx.scene.paint.Color.web("#9aa0a6"));
+
+            Button renameBtn = new Button("", editSvg);
+            renameBtn.setTooltip(new Tooltip("Rename conversation"));
+            renameBtn.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 2;");
             renameBtn.setOnAction(e -> renameConversation(conv));
 
-            // Delete button
-            Button deleteBtn = new Button("🗑️");
-            deleteBtn.setStyle("-fx-background-color: transparent; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0;");
+            // 4. Delete button with SVG Trash icon
+            javafx.scene.shape.SVGPath trashSvg = new javafx.scene.shape.SVGPath();
+            trashSvg.setContent("M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z");
+            trashSvg.setScaleX(0.5);
+            trashSvg.setScaleY(0.5);
+            trashSvg.setFill(javafx.scene.paint.Color.web("#9aa0a6"));
+
+            Button deleteBtn = new Button("", trashSvg);
+            deleteBtn.setTooltip(new Tooltip("Delete conversation"));
+            deleteBtn.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 2;");
             deleteBtn.setOnAction(e -> deleteConversation(conv));
 
             item.setOnMouseClicked(e -> {
@@ -92,7 +114,7 @@ public class ChatController {
                 }
             });
 
-            item.getChildren().addAll(titleLabel, renameBtn, deleteBtn);
+            item.getChildren().addAll(chatIcon, titleLabel, renameBtn, deleteBtn);
             conversationsListBox.getChildren().add(item);
         }
     }
