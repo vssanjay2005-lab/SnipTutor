@@ -9,6 +9,19 @@ import cv2
 import pytesseract
 import numpy as np
 
+import ctypes
+from ctypes import wintypes
+
+class RECT(ctypes.Structure):
+    _fields_ = [
+        ('left', wintypes.LONG),
+        ('top', wintypes.LONG),
+        ('right', wintypes.LONG),
+        ('bottom', wintypes.LONG)
+    ]
+
+original_work_area = None
+
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # Load environment variables
@@ -17,7 +30,7 @@ load_dotenv()
 # Initialize Gemini Client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-app = FastAPI(title="SnipTutor API")
+app = FastAPI(title="ScreenTutor API")
 
 # Enable CORS for local development
 app.add_middleware(
@@ -27,6 +40,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/set-os-workarea/")
+def set_os_workarea(dock_width: int = 370):
+    global original_work_area
+    try:
+        user32 = ctypes.windll.user32
+        curr_rect = RECT()
+        # SPI_GETWORKAREA = 0x0030
+        user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(curr_rect), 0)
+        
+        if original_work_area is None:
+            original_work_area = (curr_rect.left, curr_rect.top, curr_rect.right, curr_rect.bottom)
+            
+        screen_width = user32.GetSystemMetrics(0) # SM_CXSCREEN
+        new_right = max(600, screen_width - dock_width)
+        
+        new_rect = RECT(curr_rect.left, curr_rect.top, new_right, curr_rect.bottom)
+        # SPI_SETWORKAREA = 0x002F, SPIF_SENDCHANGE = 0x0002, SPIF_UPDATEINIFILE = 0x0001
+        res = user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(new_rect), 0x0002 | 0x0001)
+        return {"status": "ok", "new_right": new_right, "result": bool(res)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.post("/restore-os-workarea/")
+def restore_os_workarea():
+    global original_work_area
+    try:
+        if original_work_area is None:
+            return {"status": "already_restored"}
+        user32 = ctypes.windll.user32
+        restore_rect = RECT(*original_work_area)
+        res = user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(restore_rect), 0x0002 | 0x0001)
+        original_work_area = None
+        return {"status": "restored", "result": bool(res)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 class TextInput(BaseModel):
     text: str

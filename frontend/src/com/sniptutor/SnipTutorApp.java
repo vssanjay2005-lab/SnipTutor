@@ -90,6 +90,15 @@ public class SnipTutorApp extends Application {
 
             MenuItem exitItem = new MenuItem("❌ Exit ScreenTutor");
             exitItem.addActionListener(e -> {
+                try {
+                    java.net.http.HttpClient.newHttpClient().send(
+                        java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create("http://127.0.0.1:8000/restore-os-workarea/"))
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
+                            .build(),
+                        java.net.http.HttpResponse.BodyHandlers.discarding()
+                    );
+                } catch (Exception ignored) {}
                 if (hotkeyManager != null) {
                     hotkeyManager.unregister();
                 }

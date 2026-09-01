@@ -439,10 +439,14 @@ public class ChatController {
             stage.setAlwaysOnTop(true);
             isSideDocked = true;
 
-            // Automatically resize active software (Chrome / VS Code / Word) to fit the remaining left width
-            int leftWidth = (int) (visualBounds.getMaxX() - dockWidth);
-            int leftHeight = (int) visualBounds.getHeight();
-            autoSnapBackgroundAppToLeft(leftWidth, leftHeight);
+            // 1. Tell OS to resize desktop work area so ALL apps reflow within left 72%
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BACKEND_URL + "/set-os-workarea/?dock_width=" + ((int) dockWidth)))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+                client.sendAsync(req, HttpResponse.BodyHandlers.discarding());
+            } catch (Exception ignored) {}
 
             if (btnSideDock != null) {
                 btnSideDock.setText("🗗 Standard");
@@ -461,6 +465,15 @@ public class ChatController {
             stage.setHeight(standardHeight > 0 ? standardHeight : 650);
             stage.setAlwaysOnTop(false);
             isSideDocked = false;
+
+            // Restore Windows OS Work Area
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BACKEND_URL + "/restore-os-workarea/"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+                client.sendAsync(req, HttpResponse.BodyHandlers.discarding());
+            } catch (Exception ignored) {}
 
             if (btnSideDock != null) {
                 btnSideDock.setText("🗔 Dock");
