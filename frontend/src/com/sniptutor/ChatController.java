@@ -22,11 +22,15 @@ public class ChatController {
     @FXML private TextField userInput;
     @FXML private VBox chatBox;
     @FXML private ScrollPane chatScrollPane;
+    @FXML private VBox sidebarContainer;
+    @FXML private Button btnToggleSidebar;
     @FXML private VBox conversationsListBox;
     @FXML private Label currentChatTitleLabel;
     @FXML private HBox imagePreviewContainer;
     @FXML private ImageView previewImageView;
     @FXML private Label previewImageNameLabel;
+    @FXML private HBox liveContextChip;
+    @FXML private Label liveContextLabel;
     @FXML private Button btnTopCopy;
     @FXML private Button btnTopSave;
     @FXML private Button btnSideDock;
@@ -42,6 +46,7 @@ public class ChatController {
     private String currentMode = "Student";
     private Stage stage;
 
+    private boolean isLiveContextActive = true;
     private boolean isSideDocked = false;
     private double standardX = 100, standardY = 100, standardWidth = 950, standardHeight = 650;
 
@@ -170,18 +175,36 @@ public class ChatController {
     }
 
     @FXML
+    public void toggleSidebar() {
+        if (sidebarContainer != null) {
+            boolean isVisible = sidebarContainer.isVisible();
+            sidebarContainer.setVisible(!isVisible);
+            sidebarContainer.setManaged(!isVisible);
+        }
+    }
+
+    @FXML
+    public void toggleLiveContext() {
+        isLiveContextActive = !isLiveContextActive;
+        if (liveContextChip != null) {
+            liveContextChip.setVisible(isLiveContextActive);
+            liveContextChip.setManaged(isLiveContextActive);
+        }
+    }
+
+    @FXML
     private void sendMessage() {
         String text = userInput.getText();
         boolean hasText = (text != null && !text.trim().isEmpty());
         boolean hasImage = (attachedImagePath != null);
 
-        if (!hasText && !hasImage) return;
+        if (!hasText && !hasImage && !isLiveContextActive) return;
 
-        String query = hasText ? text.trim() : "";
+        String query = hasText ? text.trim() : (isLiveContextActive ? "Explain what is on my screen and help me solve it." : "");
         userInput.clear();
 
         // Auto-title conversation on first message
-        if (currentConversation.getMessages().isEmpty() && hasText) {
+        if (currentConversation.getMessages().isEmpty() && !query.isEmpty()) {
             String autoTitle = query.length() > 20 ? query.substring(0, 20) + "..." : query;
             currentConversation.setTitle(autoTitle);
             currentChatTitleLabel.setText(autoTitle);
@@ -191,6 +214,7 @@ public class ChatController {
         String historyContext = buildHistoryContext();
 
         if (hasImage) {
+            // 1. Manually attached screenshot takes priority
             Path imageToSend = attachedImagePath;
             String imagePathStr = imageToSend.toUri().toString();
             removeAttachedImage();
@@ -199,12 +223,48 @@ public class ChatController {
             displayMessageBubble("You", query.isEmpty() ? "[Uploaded Screenshot]" : query, imagePathStr);
 
             sendImageToBackend(imageToSend, query, historyContext);
+        } else if (isLiveContextActive) {
+            // 2. Automatic Zero-Click Live Screen Capture (Chrome Ask Gemini style for Desktop)
+            captureAndSendLiveContext(query, historyContext);
         } else {
+            // 3. Pure Text Mode
             currentConversation.addMessage("You", query, null);
             displayMessageBubble("You", query, null);
 
             sendTextToBackend(query, historyContext);
         }
+    }
+
+    private void captureAndSendLiveContext(String query, String historyContext) {
+        // Render user message immediately
+        currentConversation.addMessage("You", query, null);
+        displayMessageBubble("You", query, null);
+
+        new Thread(() -> {
+            try {
+                java.awt.Robot robot = new java.awt.Robot();
+                javafx.geometry.Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getBounds();
+                java.awt.Rectangle area = new java.awt.Rectangle(
+                    (int) screenBounds.getMinX(),
+                    (int) screenBounds.getMinY(),
+                    (int) screenBounds.getWidth(),
+                    (int) screenBounds.getHeight()
+                );
+                java.awt.image.BufferedImage liveCapture = robot.createScreenCapture(area);
+
+                String userHome = System.getProperty("user.home");
+                java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
+                if (!snipDir.exists()) snipDir.mkdirs();
+
+                String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+                java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".png");
+                javax.imageio.ImageIO.write(liveCapture, "png", liveFile);
+
+                sendImageToBackend(liveFile.toPath(), query, historyContext);
+            } catch (Exception e) {
+                Platform.runLater(() -> sendTextToBackend(query, historyContext));
+            }
+        }).start();
     }
 
     private String buildHistoryContext() {
@@ -364,8 +424,14 @@ public class ChatController {
             standardWidth = stage.getWidth();
             standardHeight = stage.getHeight();
 
+            // Collapse sidebar automatically to give 100% full width to the chat panel
+            if (sidebarContainer != null) {
+                sidebarContainer.setVisible(false);
+                sidebarContainer.setManaged(false);
+            }
+
             javafx.geometry.Rectangle2D visualBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
-            double dockWidth = Math.max(380, visualBounds.getWidth() * 0.28);
+            double dockWidth = Math.max(370, visualBounds.getWidth() * 0.28);
             stage.setX(visualBounds.getMaxX() - dockWidth);
             stage.setY(visualBounds.getMinY());
             stage.setWidth(dockWidth);
@@ -375,10 +441,15 @@ public class ChatController {
 
             if (btnSideDock != null) {
                 btnSideDock.setText("🗗 Standard");
-                btnSideDock.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;");
+                btnSideDock.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 4 8;");
             }
         } else {
-            // Restore to standard center window
+            // Restore to standard center window and expand sidebar
+            if (sidebarContainer != null) {
+                sidebarContainer.setVisible(true);
+                sidebarContainer.setManaged(true);
+            }
+
             stage.setX(standardX);
             stage.setY(standardY);
             stage.setWidth(standardWidth > 0 ? standardWidth : 950);
@@ -387,8 +458,8 @@ public class ChatController {
             isSideDocked = false;
 
             if (btnSideDock != null) {
-                btnSideDock.setText("🗔 Side-Dock");
-                btnSideDock.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;");
+                btnSideDock.setText("🗔 Dock");
+                btnSideDock.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 4 8;");
             }
         }
     }

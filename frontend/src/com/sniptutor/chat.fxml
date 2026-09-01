@@ -15,20 +15,23 @@
             prefWidth="950" prefHeight="650"
             style="-fx-background-color: #131314; -fx-font-family: 'Segoe UI', sans-serif;">
     
-    <!-- LEFT SIDEBAR (Gemini Style) -->
+    <!-- LEFT SIDEBAR: Collapsible Drawer -->
     <left>
-        <VBox prefWidth="240" spacing="12" style="-fx-background-color: #1e1f20; -fx-padding: 14px 10px; -fx-border-color: #2b2c2f; -fx-border-width: 0 1 0 0;">
+        <VBox fx:id="sidebarContainer" prefWidth="230" spacing="10" 
+              style="-fx-background-color: #1e1f20; -fx-padding: 12px 10px; -fx-border-color: #2b2c2f; -fx-border-width: 0 1 0 0;">
             
-            <!-- App Branding -->
-            <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 0 6px 6px 6px;">
-                <Label text="✨ ScreenTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 0 4px 4px 4px;">
+                <Label text="✨ ScreenTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 15px; -fx-font-weight: bold;"/>
+                <HBox HBox.hgrow="ALWAYS"/>
+                <Button text="✕" onAction="#toggleSidebar"
+                        style="-fx-background-color: transparent; -fx-text-fill: #8e918f; -fx-font-size: 11px; -fx-cursor: hand;"/>
             </HBox>
 
             <!-- ➕ New Chat Button -->
             <Button text="➕  New Chat" onAction="#createNewChat" maxWidth="Infinity"
-                    style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 20; -fx-padding: 10 16; -fx-font-size: 13px; -fx-cursor: hand; -fx-alignment: CENTER_LEFT;"/>
+                    style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 18; -fx-padding: 8 14; -fx-font-size: 12px; -fx-cursor: hand; -fx-alignment: CENTER_LEFT;"/>
 
-            <Label text="Recent Conversations" style="-fx-text-fill: #8e918f; -fx-font-size: 11px; -fx-padding: 8 6 0 6;"/>
+            <Label text="Conversations" style="-fx-text-fill: #8e918f; -fx-font-size: 11px; -fx-padding: 4 6 0 6;"/>
 
             <!-- List of Saved Conversations -->
             <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: #1e1f20; -fx-border-color: transparent;">
@@ -40,35 +43,24 @@
     <!-- RIGHT MAIN CHAT AREA -->
     <center>
         <BorderPane style="-fx-background-color: #131314;">
-            <!-- Header Toolbar: Snipping Tool + Side-Dock + AI Mode Control Center -->
+            <!-- Header Toolbar: Responsive Compact Bar -->
             <top>
-                <ToolBar style="-fx-background-color: #1e1f20; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-width: 0 0 1 0;">
-                    <Label fx:id="currentChatTitleLabel" text="New Chat" style="-fx-text-fill: #e3e3e3; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+                <ToolBar style="-fx-background-color: #1e1f20; -fx-padding: 6px 12px; -fx-border-color: #2b2c2f; -fx-border-width: 0 0 1 0;">
+                    <Button fx:id="btnToggleSidebar" text="☰" onAction="#toggleSidebar"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 8; -fx-cursor: hand; -fx-font-size: 12px; -fx-padding: 4 8;"/>
+                    <Label fx:id="currentChatTitleLabel" text="ScreenTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 13px; -fx-font-weight: bold; -fx-padding: 0 0 0 4;"/>
+                    
                     <HBox HBox.hgrow="ALWAYS" />
                     
-                    <!-- 1-Click Screen Context & Snipping Tools -->
-                    <Button text="⚡ Share Screen" onAction="#captureFullActiveScreen"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #fbbc04; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;"/>
-                    <Button text="📸 New Snip" onAction="#activateSnippingTool"
-                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 12;"/>
-                    <Button fx:id="btnTopCopy" text="📋 Copy" onAction="#copyAttachedImageToClipboard"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #8ab4f8; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
-                    <Button fx:id="btnTopSave" text="💾 Save As" onAction="#saveAttachedImageAs"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #81c995; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
-                    <Button text="📂 My Snips" onAction="#openSnipsFolder"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
-                    
-                    <!-- Side-Dock Screen Snap Toggle -->
-                    <Button fx:id="btnSideDock" text="🗔 Side-Dock" onAction="#toggleSideDocking"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;"/>
-                    
-                    <Label text="|" style="-fx-text-fill: #3c4043; -fx-padding: 0 4;"/>
-                    
-                    <!-- AI Mode Switcher -->
+                    <!-- Quick Actions -->
+                    <Button text="📸 Snip" onAction="#activateSnippingTool"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #ffffff; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-size: 11px; -fx-padding: 4 8;"/>
                     <Button fx:id="btnStudent" text="🎓 Student" onAction="#toggleStudentMode"
-                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
-                    <Button fx:id="btnDeveloper" text="💻 Developer" onAction="#toggleDeveloperMode"
-                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 15; -fx-cursor: hand; -fx-padding: 5 10;"/>
+                            style="-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-size: 11px; -fx-padding: 4 8;"/>
+                    <Button fx:id="btnDeveloper" text="💻 Dev" onAction="#toggleDeveloperMode"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #cccccc; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-size: 11px; -fx-padding: 4 8;"/>
+                    <Button fx:id="btnSideDock" text="🗔 Dock" onAction="#toggleSideDocking"
+                            style="-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 4 8;"/>
                 </ToolBar>
             </top>
 
@@ -76,35 +68,45 @@
             <center>
                 <ScrollPane fx:id="chatScrollPane" fitToWidth="true" style="-fx-background: #131314; -fx-border-color: transparent;">
                     <content>
-                        <VBox fx:id="chatBox" spacing="14">
+                        <VBox fx:id="chatBox" spacing="12">
                             <padding>
-                                <Insets top="20" right="30" bottom="20" left="30"/>
+                                <Insets top="14" right="16" bottom="14" left="16"/>
                             </padding>
                         </VBox>
                     </content>
                 </ScrollPane>
             </center>
 
-            <!-- Bottom Prompt Box -->
+            <!-- Bottom Prompt Box with Chrome-style Live Sharing Chip -->
             <bottom>
-                <VBox spacing="6" style="-fx-background-color: #131314; -fx-padding: 10px 30px 20px 30px;">
-                    <VBox style="-fx-background-color: #1e1f20; -fx-background-radius: 24px; -fx-padding: 8px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 24px;">
+                <VBox spacing="6" style="-fx-background-color: #131314; -fx-padding: 8px 16px 14px 16px;">
+                    <VBox style="-fx-background-color: #1e1f20; -fx-background-radius: 20px; -fx-padding: 8px 14px; -fx-border-color: #2b2c2f; -fx-border-radius: 20px;">
                         
-                        <!-- Attached Screenshot / Screen Context Preview Chip -->
-                        <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
-                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 12px; -fx-padding: 5px 10px; -fx-max-width: 280;">
-                            <ImageView fx:id="previewImageView" fitWidth="40" fitHeight="30" preserveRatio="true"/>
-                            <Label fx:id="previewImageNameLabel" text="Snip_Capture.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;" HBox.hgrow="ALWAYS"/>
-                            <Button text="✕" onAction="#removeAttachedImage"
-                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 0 2;"/>
+                        <!-- Chrome Ask Gemini-Style Live Screen Context Chip -->
+                        <HBox fx:id="liveContextChip" alignment="CENTER_LEFT" spacing="6"
+                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 10px; -fx-padding: 4px 8px; -fx-max-width: 320;">
+                            <Label text="🟢" style="-fx-font-size: 8px; -fx-text-fill: #81c995;"/>
+                            <Label fx:id="liveContextLabel" text="Live Screen Context Active" 
+                                   style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;" HBox.hgrow="ALWAYS"/>
+                            <Button text="✕" onAction="#toggleLiveContext"
+                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0 2;"/>
                         </HBox>
 
-                        <!-- Input TextField and Action Buttons -->
-                        <HBox alignment="CENTER_LEFT" spacing="10">
-                            <TextField fx:id="userInput" promptText="Ask ScreenTutor anything about your screen or code..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
-                                       style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 14px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
+                        <!-- Attached Manual Screenshot Preview Chip (when user manually snips) -->
+                        <HBox fx:id="imagePreviewContainer" visible="false" managed="false" alignment="CENTER_LEFT" spacing="8"
+                              style="-fx-background-color: #2b2c2f; -fx-background-radius: 10px; -fx-padding: 4px 8px; -fx-max-width: 240;">
+                            <ImageView fx:id="previewImageView" fitWidth="36" fitHeight="26" preserveRatio="true"/>
+                            <Label fx:id="previewImageNameLabel" text="Snip.png" style="-fx-text-fill: #e3e3e3; -fx-font-size: 11px;" HBox.hgrow="ALWAYS"/>
+                            <Button text="✕" onAction="#removeAttachedImage"
+                                    style="-fx-background-color: transparent; -fx-text-fill: #9aa0a6; -fx-font-size: 10px; -fx-cursor: hand; -fx-padding: 0 2;"/>
+                        </HBox>
+
+                        <!-- Input TextField and Send Button -->
+                        <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 4px 0 0 0;">
+                            <TextField fx:id="userInput" promptText="Ask ScreenTutor about your screen or code..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
+                                       style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 13px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
                             <Button text="➤" onAction="#sendMessage"
-                                    style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 13px; -fx-cursor: hand; -fx-min-width: 36px; -fx-min-height: 36px;"/>
+                                    style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 12px; -fx-cursor: hand; -fx-min-width: 32px; -fx-min-height: 32px;"/>
                         </HBox>
                     </VBox>
                 </VBox>
