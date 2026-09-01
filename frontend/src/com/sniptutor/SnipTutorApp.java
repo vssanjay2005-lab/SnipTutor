@@ -33,11 +33,11 @@ public class SnipTutorApp extends Application {
         }
 
         FXMLLoader loader = new FXMLLoader(fxmlUrl);
-        Scene scene = new Scene(loader.load(), 750, 550);
+        Scene scene = new Scene(loader.load(), 950, 650);
         this.controller = loader.getController();
         this.controller.setStage(stage);
 
-        stage.setTitle("SnipTutor AI Assistant");
+        stage.setTitle("ScreenTutor - Universal AI Side-Workflow Companion");
         stage.setScene(scene);
 
         // 3. When user clicks [X], hide the window instead of quitting
@@ -81,14 +81,14 @@ public class SnipTutorApp extends Application {
             MenuItem snipItem = new MenuItem("📸 Snip (Ctrl+Shift+Space)");
             snipItem.addActionListener(e -> Platform.runLater(() -> controller.activateSnippingTool()));
 
-            MenuItem openItem = new MenuItem("💬 Open SnipTutor");
+            MenuItem openItem = new MenuItem("💬 Open ScreenTutor");
             openItem.addActionListener(e -> Platform.runLater(() -> {
                 mainStage.show();
                 mainStage.setIconified(false);
                 mainStage.toFront();
             }));
 
-            MenuItem exitItem = new MenuItem("❌ Exit SnipTutor");
+            MenuItem exitItem = new MenuItem("❌ Exit ScreenTutor");
             exitItem.addActionListener(e -> {
                 if (hotkeyManager != null) {
                     hotkeyManager.unregister();
@@ -103,7 +103,7 @@ public class SnipTutorApp extends Application {
             popup.addSeparator();
             popup.add(exitItem);
 
-            trayIcon = new TrayIcon(image, "SnipTutor AI Assistant (Ctrl+Shift+Space)", popup);
+            trayIcon = new TrayIcon(image, "ScreenTutor AI Side-Workflow Companion", popup);
             trayIcon.setImageAutoSize(true);
             trayIcon.addActionListener(e -> Platform.runLater(() -> {
                 mainStage.show();

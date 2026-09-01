@@ -29,6 +29,7 @@ public class ChatController {
     @FXML private Label previewImageNameLabel;
     @FXML private Button btnTopCopy;
     @FXML private Button btnTopSave;
+    @FXML private Button btnSideDock;
     @FXML private Button btnStudent;
     @FXML private Button btnDeveloper;
 
@@ -40,6 +41,9 @@ public class ChatController {
     private Path attachedImagePath = null;
     private String currentMode = "Student";
     private Stage stage;
+
+    private boolean isSideDocked = false;
+    private double standardX = 100, standardY = 100, standardWidth = 950, standardHeight = 650;
 
     public void setStage(Stage stage) {
         this.stage = stage;
@@ -318,7 +322,7 @@ public class ChatController {
         bubbleContainer.setAlignment(isUser ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         // Header (Sender Name)
-        Label senderLabel = new Label(isUser ? "You" : "✨ SnipTutor");
+        Label senderLabel = new Label(isUser ? "You" : "✨ ScreenTutor");
         senderLabel.setStyle("-fx-text-fill: " + (isUser ? "#8ab4f8" : "#c58af9") + "; -fx-font-size: 12px; -fx-font-weight: bold;");
 
         // Message Box
@@ -348,6 +352,105 @@ public class ChatController {
 
         // Scroll to bottom
         chatScrollPane.setVvalue(1.0);
+    }
+
+    @FXML
+    public void toggleSideDocking() {
+        if (stage == null) return;
+        if (!isSideDocked) {
+            // Save standard window bounds before docking
+            standardX = stage.getX();
+            standardY = stage.getY();
+            standardWidth = stage.getWidth();
+            standardHeight = stage.getHeight();
+
+            javafx.geometry.Rectangle2D visualBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+            double dockWidth = Math.max(380, visualBounds.getWidth() * 0.28);
+            stage.setX(visualBounds.getMaxX() - dockWidth);
+            stage.setY(visualBounds.getMinY());
+            stage.setWidth(dockWidth);
+            stage.setHeight(visualBounds.getHeight());
+            stage.setAlwaysOnTop(true);
+            isSideDocked = true;
+
+            if (btnSideDock != null) {
+                btnSideDock.setText("🗗 Standard");
+                btnSideDock.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;");
+            }
+        } else {
+            // Restore to standard center window
+            stage.setX(standardX);
+            stage.setY(standardY);
+            stage.setWidth(standardWidth > 0 ? standardWidth : 950);
+            stage.setHeight(standardHeight > 0 ? standardHeight : 650);
+            stage.setAlwaysOnTop(false);
+            isSideDocked = false;
+
+            if (btnSideDock != null) {
+                btnSideDock.setText("🗔 Side-Dock");
+                btnSideDock.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 15; -fx-cursor: hand; -fx-font-weight: bold; -fx-padding: 5 10;");
+            }
+        }
+    }
+
+    @FXML
+    public void captureFullActiveScreen() {
+        try {
+            boolean wasAlwaysOnTop = (stage != null && stage.isAlwaysOnTop());
+            if (stage != null) {
+                stage.setOpacity(0.0);
+            }
+            new Thread(() -> {
+                try {
+                    Thread.sleep(200); // brief moment to let OS render underlying screen
+                    java.awt.Robot robot = new java.awt.Robot();
+                    javafx.geometry.Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getBounds();
+                    java.awt.Rectangle area = new java.awt.Rectangle(
+                        (int) screenBounds.getMinX(),
+                        (int) screenBounds.getMinY(),
+                        (int) screenBounds.getWidth(),
+                        (int) screenBounds.getHeight()
+                    );
+                    java.awt.image.BufferedImage screenCapture = robot.createScreenCapture(area);
+
+                    String userHome = System.getProperty("user.home");
+                    java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
+                    if (!snipDir.exists()) snipDir.mkdirs();
+
+                    String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+                    java.io.File archivedFile = new java.io.File(snipDir, "ScreenContext_" + timestamp + ".png");
+                    javax.imageio.ImageIO.write(screenCapture, "png", archivedFile);
+
+                    // Auto-copy to OS clipboard
+                    try {
+                        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                            .setContents(new TransferableImage(screenCapture), null);
+                    } catch (Exception ignored) {}
+
+                    Platform.runLater(() -> {
+                        if (stage != null) {
+                            stage.setOpacity(1.0);
+                            if (wasAlwaysOnTop) stage.setAlwaysOnTop(true);
+                        }
+                        attachedImagePath = archivedFile.toPath();
+                        previewImageView.setImage(new Image(archivedFile.toURI().toString()));
+                        if (previewImageNameLabel != null) {
+                            previewImageNameLabel.setText("⚡ ScreenContext_" + timestamp + ".png");
+                        }
+                        imagePreviewContainer.setVisible(true);
+                        imagePreviewContainer.setManaged(true);
+                        userInput.requestFocus();
+                    });
+                } catch (Exception e) {
+                    Platform.runLater(() -> {
+                        if (stage != null) stage.setOpacity(1.0);
+                    });
+                    e.printStackTrace();
+                }
+            }).start();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     @FXML
