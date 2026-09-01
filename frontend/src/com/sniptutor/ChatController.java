@@ -439,6 +439,11 @@ public class ChatController {
             stage.setAlwaysOnTop(true);
             isSideDocked = true;
 
+            // Automatically resize active software (Chrome / VS Code / Word) to fit the remaining left width
+            int leftWidth = (int) (visualBounds.getMaxX() - dockWidth);
+            int leftHeight = (int) visualBounds.getHeight();
+            autoSnapBackgroundAppToLeft(leftWidth, leftHeight);
+
             if (btnSideDock != null) {
                 btnSideDock.setText("🗗 Standard");
                 btnSideDock.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: #ffffff; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 4 8;");
@@ -462,6 +467,30 @@ public class ChatController {
                 btnSideDock.setStyle("-fx-background-color: #2b2c2f; -fx-text-fill: #c58af9; -fx-background-radius: 12; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 4 8;");
             }
         }
+    }
+
+    private void autoSnapBackgroundAppToLeft(int targetWidth, int targetHeight) {
+        new Thread(() -> {
+            try {
+                String psScript = "$c = @'\n"
+                    + "using System;\n"
+                    + "using System.Runtime.InteropServices;\n"
+                    + "public class WinUtils {\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);\n"
+                    + "}\n"
+                    + "'@\n"
+                    + "Add-Type -TypeDefinition $c -ErrorAction SilentlyContinue\n"
+                    + "$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' -and $_.MainWindowTitle -notlike '*ScreenTutor*' -and $_.ProcessName -notlike 'explorer' } | Select-Object -First 1\n"
+                    + "if ($p) {\n"
+                    + "    [WinUtils]::ShowWindow($p.MainWindowHandle, 9)\n"
+                    + "    [WinUtils]::SetWindowPos($p.MainWindowHandle, [IntPtr]::Zero, 0, 0, " + targetWidth + ", " + targetHeight + ", 0x0040)\n"
+                    + "}\n";
+
+                ProcessBuilder pb = new ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript);
+                pb.start();
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     @FXML
