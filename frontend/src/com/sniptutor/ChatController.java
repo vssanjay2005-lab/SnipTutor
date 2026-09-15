@@ -382,7 +382,7 @@ public class ChatController {
         bubbleContainer.setAlignment(isUser ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         // Header (Sender Name)
-        Label senderLabel = new Label(isUser ? "You" : "✨ ScreenTutor");
+        Label senderLabel = new Label(isUser ? "You" : "✨ SnipTutor");
         senderLabel.setStyle("-fx-text-fill: " + (isUser ? "#8ab4f8" : "#c58af9") + "; -fx-font-size: 12px; -fx-font-weight: bold;");
 
         // Message Box
@@ -494,7 +494,7 @@ public class ChatController {
                     + "}\n"
                     + "'@\n"
                     + "Add-Type -TypeDefinition $c -ErrorAction SilentlyContinue\n"
-                    + "$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' -and $_.MainWindowTitle -notlike '*ScreenTutor*' -and $_.ProcessName -notlike 'explorer' } | Select-Object -First 1\n"
+                    + "$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' -and $_.MainWindowTitle -notlike '*SnipTutor*' -and $_.ProcessName -notlike 'explorer' } | Select-Object -First 1\n"
                     + "if ($p) {\n"
                     + "    [WinUtils]::ShowWindow($p.MainWindowHandle, 9)\n"
                     + "    [WinUtils]::SetWindowPos($p.MainWindowHandle, [IntPtr]::Zero, 0, 0, " + targetWidth + ", " + targetHeight + ", 0x0040)\n"

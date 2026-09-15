@@ -30,7 +30,7 @@ load_dotenv()
 # Initialize Gemini Client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-app = FastAPI(title="ScreenTutor API")
+app = FastAPI(title="SnipTutor API")
 
 # Enable CORS for local development
 app.add_middleware(
@@ -57,9 +57,27 @@ def set_os_workarea(dock_width: int = 370):
         new_right = max(600, screen_width - dock_width)
         
         new_rect = RECT(curr_rect.left, curr_rect.top, new_right, curr_rect.bottom)
-        # SPI_SETWORKAREA = 0x002F, SPIF_SENDCHANGE = 0x0002, SPIF_UPDATEINIFILE = 0x0001
-        res = user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(new_rect), 0x0002 | 0x0001)
-        return {"status": "ok", "new_right": new_right, "result": bool(res)}
+        # 1. Update OS WorkArea
+        user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(new_rect), 0x0002 | 0x0001)
+
+        # 2. Actively resize all visible background application windows to the left partition
+        def enum_cb(hwnd, lparam):
+            if user32.IsWindowVisible(hwnd):
+                l = user32.GetWindowTextLengthW(hwnd)
+                if l > 0:
+                    buf = ctypes.create_unicode_buffer(l + 1)
+                    user32.GetWindowTextW(hwnd, buf, l + 1)
+                    title = buf.value
+                    if title and 'SnipTutor' not in title and title not in ['Program Manager', 'Settings', 'Windows Input Experience']:
+                        # Unmaximize and resize to left 72%
+                        user32.ShowWindow(hwnd, 9) # SW_RESTORE
+                        user32.SetWindowPos(hwnd, 0, 0, 0, new_right, curr_rect.bottom, 0x0040 | 0x0004)
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+
+        return {"status": "ok", "new_right": new_right}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -71,9 +89,28 @@ def restore_os_workarea():
             return {"status": "already_restored"}
         user32 = ctypes.windll.user32
         restore_rect = RECT(*original_work_area)
-        res = user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(restore_rect), 0x0002 | 0x0001)
+        user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(restore_rect), 0x0002 | 0x0001)
+
+        orig_w = original_work_area[2]
+        orig_h = original_work_area[3]
         original_work_area = None
-        return {"status": "restored", "result": bool(res)}
+
+        # Restore application windows to full width
+        def enum_cb(hwnd, lparam):
+            if user32.IsWindowVisible(hwnd):
+                l = user32.GetWindowTextLengthW(hwnd)
+                if l > 0:
+                    buf = ctypes.create_unicode_buffer(l + 1)
+                    user32.GetWindowTextW(hwnd, buf, l + 1)
+                    title = buf.value
+                    if title and 'SnipTutor' not in title and title not in ['Program Manager', 'Settings', 'Windows Input Experience']:
+                        user32.SetWindowPos(hwnd, 0, 0, 0, orig_w, orig_h, 0x0040 | 0x0004)
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+
+        return {"status": "restored"}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 

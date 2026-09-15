@@ -21,7 +21,7 @@
               style="-fx-background-color: #1e1f20; -fx-padding: 12px 10px; -fx-border-color: #2b2c2f; -fx-border-width: 0 1 0 0;">
             
             <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 0 4px 4px 4px;">
-                <Label text="✨ ScreenTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 15px; -fx-font-weight: bold;"/>
+                <Label text="✨ SnipTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 15px; -fx-font-weight: bold;"/>
                 <HBox HBox.hgrow="ALWAYS"/>
                 <Button text="✕" onAction="#toggleSidebar"
                         style="-fx-background-color: transparent; -fx-text-fill: #8e918f; -fx-font-size: 11px; -fx-cursor: hand;"/>
@@ -48,7 +48,7 @@
                 <ToolBar style="-fx-background-color: #1e1f20; -fx-padding: 6px 12px; -fx-border-color: #2b2c2f; -fx-border-width: 0 0 1 0;">
                     <Button fx:id="btnToggleSidebar" text="☰" onAction="#toggleSidebar"
                             style="-fx-background-color: #2b2c2f; -fx-text-fill: #e3e3e3; -fx-background-radius: 8; -fx-cursor: hand; -fx-font-size: 12px; -fx-padding: 4 8;"/>
-                    <Label fx:id="currentChatTitleLabel" text="ScreenTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 13px; -fx-font-weight: bold; -fx-padding: 0 0 0 4;"/>
+                    <Label fx:id="currentChatTitleLabel" text="SnipTutor" style="-fx-text-fill: #e3e3e3; -fx-font-size: 13px; -fx-font-weight: bold; -fx-padding: 0 0 0 4;"/>
                     
                     <HBox HBox.hgrow="ALWAYS" />
                     
@@ -103,7 +103,7 @@
 
                         <!-- Input TextField and Send Button -->
                         <HBox alignment="CENTER_LEFT" spacing="8" style="-fx-padding: 4px 0 0 0;">
-                            <TextField fx:id="userInput" promptText="Ask ScreenTutor about your screen or code..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
+                            <TextField fx:id="userInput" promptText="Ask SnipTutor about your screen or code..." HBox.hgrow="ALWAYS" onAction="#sendMessage"
                                        style="-fx-background-color: transparent; -fx-text-fill: #ffffff; -fx-prompt-text-fill: #8e918f; -fx-font-size: 13px; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;"/>
                             <Button text="➤" onAction="#sendMessage"
                                     style="-fx-background-color: #1a73e8; -fx-text-fill: white; -fx-background-radius: 50; -fx-font-size: 12px; -fx-cursor: hand; -fx-min-width: 32px; -fx-min-height: 32px;"/>

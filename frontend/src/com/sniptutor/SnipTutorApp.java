@@ -37,7 +37,7 @@ public class SnipTutorApp extends Application {
         this.controller = loader.getController();
         this.controller.setStage(stage);
 
-        stage.setTitle("ScreenTutor - Universal AI Side-Workflow Companion");
+        stage.setTitle("SnipTutor - Universal AI Side-Workflow Companion");
         stage.setScene(scene);
 
         // 3. When user clicks [X], hide the window instead of quitting
@@ -81,14 +81,14 @@ public class SnipTutorApp extends Application {
             MenuItem snipItem = new MenuItem("📸 Snip (Ctrl+Shift+Space)");
             snipItem.addActionListener(e -> Platform.runLater(() -> controller.activateSnippingTool()));
 
-            MenuItem openItem = new MenuItem("💬 Open ScreenTutor");
+            MenuItem openItem = new MenuItem("💬 Open SnipTutor");
             openItem.addActionListener(e -> Platform.runLater(() -> {
                 mainStage.show();
                 mainStage.setIconified(false);
                 mainStage.toFront();
             }));
 
-            MenuItem exitItem = new MenuItem("❌ Exit ScreenTutor");
+            MenuItem exitItem = new MenuItem("❌ Exit SnipTutor");
             exitItem.addActionListener(e -> {
                 try {
                     java.net.http.HttpClient.newHttpClient().send(
@@ -112,7 +112,7 @@ public class SnipTutorApp extends Application {
             popup.addSeparator();
             popup.add(exitItem);
 
-            trayIcon = new TrayIcon(image, "ScreenTutor AI Side-Workflow Companion", popup);
+            trayIcon = new TrayIcon(image, "SnipTutor AI Side-Workflow Companion", popup);
             trayIcon.setImageAutoSize(true);
             trayIcon.addActionListener(e -> Platform.runLater(() -> {
                 mainStage.show();
