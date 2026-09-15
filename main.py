@@ -99,7 +99,7 @@ class TextInput(BaseModel):
     mode: Optional[str] = "Student"
 
 def call_gemini(prompt: str) -> str:
-    models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash"]
+    models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
     last_error = None
     for model_name in models_to_try:
         try:
@@ -155,7 +155,16 @@ async def process_image(
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        extracted_text = pytesseract.image_to_string(img).strip()
+        # Fast OCR preprocessing: resize if large to speed up Tesseract
+        h, w = img.shape[:2]
+        if w > 1280:
+            scale = 1280.0 / w
+            resized = cv2.resize(img, (1280, int(h * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            resized = img
+
+        gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        extracted_text = pytesseract.image_to_string(gray, config='--oem 3 --psm 6').strip()
         user_question = prompt.strip() if (prompt and prompt.strip()) else "Please analyze and explain what is shown in this screenshot."
 
         mode_instruction = (
@@ -171,7 +180,7 @@ Style instruction: {mode_instruction}
 {history if history else "[Start of conversation]"}
 
 --- NEW SCREENSHOT OCR CONTENT ---
-{extracted_text if extracted_text else "[No readable text found in image - analyze visual structure if applicable]"}
+{extracted_text if extracted_text else "[Visual screen capture]"}
 
 --- USER QUESTION ABOUT SCREENSHOT ---
 {user_question}

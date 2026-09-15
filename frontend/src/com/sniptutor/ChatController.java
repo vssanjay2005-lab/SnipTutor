@@ -241,6 +241,8 @@ public class ChatController {
         currentConversation.addMessage("You", query, null);
         displayMessageBubble("You", query, null);
 
+        VBox loadingNode = displayLoadingBubble("SnipTutor");
+
         new Thread(() -> {
             try {
                 java.awt.Robot robot = new java.awt.Robot();
@@ -261,9 +263,12 @@ public class ChatController {
                 java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".png");
                 javax.imageio.ImageIO.write(liveCapture, "png", liveFile);
 
-                sendImageToBackend(liveFile.toPath(), query, historyContext);
+                sendImageToBackendWithLoading(liveFile.toPath(), query, historyContext, loadingNode);
             } catch (Exception e) {
-                Platform.runLater(() -> sendTextToBackend(query, historyContext));
+                Platform.runLater(() -> {
+                    chatBox.getChildren().remove(loadingNode);
+                    sendTextToBackend(query, historyContext);
+                });
             }
         }).start();
     }
@@ -277,6 +282,7 @@ public class ChatController {
     }
 
     private void sendTextToBackend(String query, String history) {
+        VBox loadingNode = displayLoadingBubble("SnipTutor");
         String jsonPayload = "{\"text\":" + escapeJson(query) + 
                              ",\"history\":" + escapeJson(history) + 
                              ",\"mode\":" + escapeJson(currentMode) + "}";
@@ -297,12 +303,14 @@ public class ChatController {
                 }
                 final String finalReply = reply;
                 Platform.runLater(() -> {
+                    chatBox.getChildren().remove(loadingNode);
                     currentConversation.addMessage("SnipTutor", finalReply, null);
                     displayMessageBubble("SnipTutor", finalReply, null);
                 });
             })
             .exceptionally(e -> {
                 Platform.runLater(() -> {
+                    chatBox.getChildren().remove(loadingNode);
                     String err = "Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
                     displayMessageBubble("SnipTutor", err, null);
                 });
@@ -311,6 +319,11 @@ public class ChatController {
     }
 
     private void sendImageToBackend(Path filePath, String optionalPrompt, String history) {
+        VBox loadingNode = displayLoadingBubble("SnipTutor");
+        sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
+    }
+
+    private void sendImageToBackendWithLoading(Path filePath, String optionalPrompt, String history, VBox loadingNode) {
         try {
             String boundary = "----SnipTutorBoundary" + System.currentTimeMillis();
             String CRLF = "\r\n";
@@ -360,20 +373,46 @@ public class ChatController {
 
                     final String finalReply = reply;
                     Platform.runLater(() -> {
+                        chatBox.getChildren().remove(loadingNode);
                         currentConversation.addMessage("SnipTutor", finalReply, null);
                         displayMessageBubble("SnipTutor", finalReply, null);
                     });
                 })
                 .exceptionally(e -> {
                     Platform.runLater(() -> {
+                        chatBox.getChildren().remove(loadingNode);
                         displayMessageBubble("SnipTutor", "Connection Error: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()), null);
                     });
                     return null;
                 });
 
         } catch (Exception e) {
-            displayMessageBubble("SnipTutor", "Error uploading screenshot: " + e.getMessage(), null);
+            Platform.runLater(() -> {
+                chatBox.getChildren().remove(loadingNode);
+                displayMessageBubble("SnipTutor", "Error uploading screenshot: " + e.getMessage(), null);
+            });
         }
+    }
+
+    private VBox displayLoadingBubble(String sender) {
+        VBox bubbleContainer = new VBox(6);
+        bubbleContainer.setAlignment(Pos.CENTER_LEFT);
+
+        Label senderLabel = new Label("✨ SnipTutor");
+        senderLabel.setStyle("-fx-text-fill: #c58af9; -fx-font-size: 12px; -fx-font-weight: bold;");
+
+        VBox messageBox = new VBox(8);
+        messageBox.setMaxWidth(550);
+        messageBox.setStyle("-fx-background-color: #1e1f20; -fx-background-radius: 16px; -fx-padding: 10px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 16px;");
+
+        Label contentLabel = new Label("✦ SnipTutor is thinking...");
+        contentLabel.setStyle("-fx-text-fill: #9aa0a6; -fx-font-size: 13px; -fx-font-style: italic;");
+        messageBox.getChildren().add(contentLabel);
+
+        bubbleContainer.getChildren().addAll(senderLabel, messageBox);
+        chatBox.getChildren().add(bubbleContainer);
+        chatScrollPane.setVvalue(1.0);
+        return bubbleContainer;
     }
 
     private void displayMessageBubble(String sender, String text, String imagePath) {
