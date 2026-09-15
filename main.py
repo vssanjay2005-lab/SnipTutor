@@ -54,30 +54,20 @@ def set_os_workarea(dock_width: int = 370):
             original_work_area = (curr_rect.left, curr_rect.top, curr_rect.right, curr_rect.bottom)
             
         screen_width = user32.GetSystemMetrics(0) # SM_CXSCREEN
+        screen_height = user32.GetSystemMetrics(1) # SM_CYSCREEN
         new_right = max(600, screen_width - dock_width)
         
         new_rect = RECT(curr_rect.left, curr_rect.top, new_right, curr_rect.bottom)
-        # 1. Update OS WorkArea
+        # 1. Update OS WorkArea: SPI_SETWORKAREA = 0x002F, SPIF_UPDATEINIFILE = 0x0001, SPIF_SENDCHANGE = 0x0002
         user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(new_rect), 0x0002 | 0x0001)
 
-        # 2. Actively resize all visible background application windows to the left partition
-        def enum_cb(hwnd, lparam):
-            if user32.IsWindowVisible(hwnd):
-                l = user32.GetWindowTextLengthW(hwnd)
-                if l > 0:
-                    buf = ctypes.create_unicode_buffer(l + 1)
-                    user32.GetWindowTextW(hwnd, buf, l + 1)
-                    title = buf.value
-                    if title and 'SnipTutor' not in title and title not in ['Program Manager', 'Settings', 'Windows Input Experience']:
-                        # Unmaximize and resize to left 72%
-                        user32.ShowWindow(hwnd, 9) # SW_RESTORE
-                        user32.SetWindowPos(hwnd, 0, 0, 0, new_right, curr_rect.bottom, 0x0040 | 0x0004)
-            return True
+        # 2. Broadcast WM_SETTINGCHANGE (0x001A) to HWND_BROADCAST (0xFFFF)
+        try:
+            user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0x002F, ctypes.c_wchar_p("SPI_SETWORKAREA"), 0x0002, 150, ctypes.byref(ctypes.c_ulong()))
+        except Exception:
+            pass
 
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
-
-        return {"status": "ok", "new_right": new_right}
+        return {"status": "ok", "new_right": new_right, "dock_width": dock_width}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -89,26 +79,15 @@ def restore_os_workarea():
             return {"status": "already_restored"}
         user32 = ctypes.windll.user32
         restore_rect = RECT(*original_work_area)
+        # SPI_SETWORKAREA = 0x002F
         user32.SystemParametersInfoW(0x002F, 0, ctypes.byref(restore_rect), 0x0002 | 0x0001)
-
-        orig_w = original_work_area[2]
-        orig_h = original_work_area[3]
         original_work_area = None
 
-        # Restore application windows to full width
-        def enum_cb(hwnd, lparam):
-            if user32.IsWindowVisible(hwnd):
-                l = user32.GetWindowTextLengthW(hwnd)
-                if l > 0:
-                    buf = ctypes.create_unicode_buffer(l + 1)
-                    user32.GetWindowTextW(hwnd, buf, l + 1)
-                    title = buf.value
-                    if title and 'SnipTutor' not in title and title not in ['Program Manager', 'Settings', 'Windows Input Experience']:
-                        user32.SetWindowPos(hwnd, 0, 0, 0, orig_w, orig_h, 0x0040 | 0x0004)
-            return True
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+        # Broadcast WM_SETTINGCHANGE
+        try:
+            user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0x002F, ctypes.c_wchar_p("SPI_SETWORKAREA"), 0x0002, 150, ctypes.byref(ctypes.c_ulong()))
+        except Exception:
+            pass
 
         return {"status": "restored"}
     except Exception as e:

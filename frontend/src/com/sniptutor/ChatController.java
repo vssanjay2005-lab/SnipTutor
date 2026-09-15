@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -431,15 +432,23 @@ public class ChatController {
             }
 
             javafx.geometry.Rectangle2D visualBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
-            double dockWidth = Math.max(370, visualBounds.getWidth() * 0.28);
+            double screenWidth = visualBounds.getWidth();
+            double screenHeight = visualBounds.getHeight();
+            double dockWidth = Math.max(370, screenWidth * 0.28);
+            int workspaceWidth = (int) (visualBounds.getMaxX() - dockWidth);
+            int workspaceHeight = (int) screenHeight;
+
             stage.setX(visualBounds.getMaxX() - dockWidth);
             stage.setY(visualBounds.getMinY());
             stage.setWidth(dockWidth);
-            stage.setHeight(visualBounds.getHeight());
+            stage.setHeight(screenHeight);
             stage.setAlwaysOnTop(true);
             isSideDocked = true;
 
-            // 1. Tell OS to resize desktop work area so ALL apps reflow within left 72%
+            // 1. Actively snap all background windows to left 72%
+            autoSnapBackgroundAppToLeft(workspaceWidth, workspaceHeight);
+
+            // 2. Tell OS to resize desktop work area so ALL apps reflow within left 72%
             try {
                 HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(BACKEND_URL + "/set-os-workarea/?dock_width=" + ((int) dockWidth)))
@@ -485,22 +494,67 @@ public class ChatController {
     private void autoSnapBackgroundAppToLeft(int targetWidth, int targetHeight) {
         new Thread(() -> {
             try {
-                String psScript = "$c = @'\n"
+                String psScript = "$code = @'\n"
                     + "using System;\n"
                     + "using System.Runtime.InteropServices;\n"
-                    + "public class WinUtils {\n"
+                    + "using System.Text;\n"
+                    + "using System.Collections.Generic;\n"
+                    + "public class WindowSnapper {\n"
                     + "    [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);\n"
                     + "    [DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr hWnd);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr hWnd);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool IsZoomed(IntPtr hWnd);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern int GetWindowTextLength(IntPtr hWnd);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern int GetClassName(IntPtr hWnd, StringBuilder lpString, int nMaxCount);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern IntPtr GetShellWindow();\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);\n"
+                    + "    [DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);\n"
+                    + "    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);\n"
+                    + "    [StructLayout(LayoutKind.Sequential)]\n"
+                    + "    public struct RECT { public int Left, Top, Right, Bottom; }\n"
+                    + "    public static void SnapAll(int targetW, int targetH) {\n"
+                    + "        IntPtr shell = GetShellWindow();\n"
+                    + "        EnumWindows((hWnd, lParam) => {\n"
+                    + "            try {\n"
+                    + "                if (hWnd == shell || !IsWindowVisible(hWnd) || IsIconic(hWnd)) return true;\n"
+                    + "                int len = GetWindowTextLength(hWnd);\n"
+                    + "                if (len == 0) return true;\n"
+                    + "                StringBuilder sb = new StringBuilder(len + 1);\n"
+                    + "                GetWindowText(hWnd, sb, len + 1);\n"
+                    + "                string title = sb.ToString();\n"
+                    + "                if (title == \"Program Manager\" || title == \"Windows Input Experience\" || title == \"Settings\") return true;\n"
+                    + "                if (title.IndexOf(\"SnipTutor\", StringComparison.OrdinalIgnoreCase) >= 0) return true;\n"
+                    + "                StringBuilder sbCls = new StringBuilder(256);\n"
+                    + "                GetClassName(hWnd, sbCls, 256);\n"
+                    + "                string cls = sbCls.ToString();\n"
+                    + "                if (cls == \"Progman\" || cls == \"Shell_TrayWnd\" || cls == \"Windows.UI.Core.CoreWindow\") return true;\n"
+                    + "                int style = GetWindowLong(hWnd, -16);\n"
+                    + "                int exStyle = GetWindowLong(hWnd, -20);\n"
+                    + "                if ((style & 0x40000000) != 0) return true;\n"
+                    + "                if ((exStyle & 0x00000080) != 0 && (exStyle & 0x00040000) == 0) return true;\n"
+                    + "                RECT r;\n"
+                    + "                GetWindowRect(hWnd, out r);\n"
+                    + "                if ((r.Right - r.Left) < 80 || (r.Bottom - r.Top) < 80) return true;\n"
+                    + "                if (IsZoomed(hWnd)) {\n"
+                    + "                    ShowWindow(hWnd, 9);\n"
+                    + "                }\n"
+                    + "                SetWindowPos(hWnd, IntPtr.Zero, 0, 0, targetW, targetH, 0x0074);\n"
+                    + "            } catch {}\n"
+                    + "            return true;\n"
+                    + "        }, IntPtr.Zero);\n"
+                    + "    }\n"
                     + "}\n"
                     + "'@\n"
-                    + "Add-Type -TypeDefinition $c -ErrorAction SilentlyContinue\n"
-                    + "$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' -and $_.MainWindowTitle -notlike '*SnipTutor*' -and $_.ProcessName -notlike 'explorer' } | Select-Object -First 1\n"
-                    + "if ($p) {\n"
-                    + "    [WinUtils]::ShowWindow($p.MainWindowHandle, 9)\n"
-                    + "    [WinUtils]::SetWindowPos($p.MainWindowHandle, [IntPtr]::Zero, 0, 0, " + targetWidth + ", " + targetHeight + ", 0x0040)\n"
-                    + "}\n";
+                    + "Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue\n"
+                    + "[WindowSnapper]::SnapAll(" + targetWidth + ", " + targetHeight + ")\n";
 
-                ProcessBuilder pb = new ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript);
+                byte[] encodedBytes = psScript.getBytes(StandardCharsets.UTF_16LE);
+                String base64Cmd = Base64.getEncoder().encodeToString(encodedBytes);
+
+                ProcessBuilder pb = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", base64Cmd);
                 pb.start();
             } catch (Exception ignored) {}
         }).start();
