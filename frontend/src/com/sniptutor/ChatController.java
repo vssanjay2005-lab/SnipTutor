@@ -56,7 +56,8 @@ public class ChatController {
     @FXML private Button btnAuthAction;
 
     private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(java.time.Duration.ofSeconds(15))
+            .connectTimeout(java.time.Duration.ofSeconds(45))
+            .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
     public static String BACKEND_URL = resolveBackendUrl();
 
@@ -70,9 +71,11 @@ public class ChatController {
             try {
                 File f = new File(candidate);
                 if (f.exists()) {
-                    String url = Files.readString(f.toPath(), StandardCharsets.UTF_8).trim();
-                    if (!url.isEmpty() && !url.startsWith("#")) {
-                        return url.replaceAll("/+$", "");
+                    for (String line : Files.readAllLines(f.toPath(), StandardCharsets.UTF_8)) {
+                        String trimmed = line.trim();
+                        if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                            return trimmed.replaceAll("/+$", "");
+                        }
                     }
                 }
             } catch (Exception ignored) {}
@@ -90,7 +93,14 @@ public class ChatController {
                 }
             }
         } catch (Exception ignored) {}
-        return "http://127.0.0.1:8000";
+
+        // If local dev backend (127.0.0.1:8000) is running, use it; otherwise use live Render cloud backend!
+        try (java.net.Socket s = new java.net.Socket()) {
+            s.connect(new java.net.InetSocketAddress("127.0.0.1", 8000), 350);
+            return "http://127.0.0.1:8000";
+        } catch (Exception ignored) {
+            return "https://sniptutor.onrender.com";
+        }
     }
 
     private final List<Conversation> conversations = new ArrayList<>();

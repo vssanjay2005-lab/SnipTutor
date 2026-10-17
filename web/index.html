@@ -493,9 +493,22 @@
     <button class="btn-icon" onclick="toggleSidebar()" title="Conversations">☰</button>
     <span id="currentChatTitle" class="toolbar-title">SnipTutor</span>
     <div class="spacer"></div>
-    <button class="pill-btn snip-btn" onclick="startBrowserScreenSnip()" title="Capture & crop any window or screen">📸 Snip Screen</button>
+    <button class="pill-btn snip-btn" onclick="startBrowserScreenSnip()" title="Capture & crop any window or screen">📸 Snip</button>
+    <button id="btnLiveContext" class="pill-btn" onclick="toggleWebLiveContext()" title="Automatically share live screen context with every prompt">⚪ Live Screen: Off</button>
     <button id="btnStudent" class="pill-btn active" onclick="setMode('Student')">🎓 Student</button>
     <button id="btnDeveloper" class="pill-btn" onclick="setMode('Developer')">💻 Dev</button>
+    <a href="https://github.com/vssanjay2005-lab/SnipTutor/releases/download/v2.0.0/SnipTutor-Windows-x64.zip"
+       class="pill-btn active"
+       style="text-decoration:none;background:#238636;"
+       title="Download Native Windows Desktop App (.exe) with 28% Side-Dock, 72% Window Auto-Snap & Global Hotkey">⬇️ Desktop App (.exe)</a>
+  </div>
+
+  <!-- Desktop Companion Banner -->
+  <div id="desktopBanner" style="background:#161b22;border-bottom:1px solid #30363d;padding:7px 14px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:#c9d1d9;">
+    <span>💡 Want <b>28% Windows Side-Docking</b>, <b>72% Auto Window Snap</b>, <b>System Tray</b> &amp; <b>Zero-Click Live Screen Sharing</b>?</span>
+    <a href="https://github.com/vssanjay2005-lab/SnipTutor/releases/download/v2.0.0/SnipTutor-Windows-x64.zip"
+       style="background:#1a73e8;color:#fff;text-decoration:none;padding:4px 12px;border-radius:12px;font-weight:700;white-space:nowrap;">⬇️ Download SnipTutor Desktop (.exe for Windows)</a>
+    <button onclick="document.getElementById('desktopBanner').style.display='none'" style="background:transparent;border:none;color:#8b949e;cursor:pointer;font-size:12px;">✕</button>
   </div>
 
   <!-- Messages Stream -->
@@ -505,6 +518,11 @@
   <div class="bottom-bar-wrapper">
     <div class="prompt-container">
       <div class="chip-bar">
+        <div id="liveStreamChip" class="context-chip" style="display:none;">
+          <span style="color:#81c995;font-size:9px;">🟢</span>
+          <span>Live Screen Context Active (Auto-capturing shared screen)</span>
+          <button class="chip-close" onclick="stopWebLiveContext()">✕</button>
+        </div>
         <div id="attachmentChip" class="context-chip" style="display:none;">
           <span id="attachmentChipIcon">📄</span>
           <span id="attachmentChipText">Attached</span>
@@ -517,7 +535,8 @@
         <div id="attachMenu" class="attach-menu">
           <button class="attach-menu-item" onclick="triggerFileUpload()">📁 Upload File (PDF, PPT, DOC, Excel, Code, Image)</button>
           <button class="attach-menu-item" onclick="promptUrlAttachment()">🌐 Attach Web URL / Article Link</button>
-          <button class="attach-menu-item" onclick="startBrowserScreenSnip()">📸 Snip Screen Region (Live Capture)</button>
+          <button class="attach-menu-item" onclick="startBrowserScreenSnip()">📸 Snip Screen Region (Crop Capture)</button>
+          <button class="attach-menu-item" onclick="toggleWebLiveContext()">🟢 Enable Continuous Live Screen Sharing</button>
         </div>
         <input type="file" id="hiddenFileInput" style="display:none" onchange="handleFileSelected(event)" />
         <input type="text" id="userInput" class="prompt-input" placeholder="Ask SnipTutor about your screen, code, document, or URL... (Ctrl+V to paste image)" onkeydown="if(event.key==='Enter') sendMessage()" />
@@ -584,6 +603,56 @@
     let isImageAttach = false;
     let loggedInUser = JSON.parse(localStorage.getItem('sniptutor_user') || 'null');
     let isRegisterMode = false;
+    let liveScreenStream = null;
+    let liveVideoEl = null;
+
+    async function toggleWebLiveContext() {
+      document.getElementById('attachMenu').classList.remove('open');
+      if (liveScreenStream) {
+        stopWebLiveContext();
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Live screen sharing requires a desktop browser or the SnipTutor Windows Desktop App (.exe).');
+        return;
+      }
+      try {
+        liveScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false });
+        liveVideoEl = document.createElement('video');
+        liveVideoEl.srcObject = liveScreenStream;
+        await liveVideoEl.play();
+        liveScreenStream.getVideoTracks()[0].addEventListener('ended', () => stopWebLiveContext());
+        document.getElementById('liveStreamChip').style.display = 'inline-flex';
+        const btn = document.getElementById('btnLiveContext');
+        btn.textContent = '🟢 Live Screen: Active';
+        btn.classList.add('active');
+      } catch (e) {
+        stopWebLiveContext();
+      }
+    }
+
+    function stopWebLiveContext() {
+      if (liveScreenStream) {
+        liveScreenStream.getTracks().forEach(t => t.stop());
+        liveScreenStream = null;
+      }
+      liveVideoEl = null;
+      document.getElementById('liveStreamChip').style.display = 'none';
+      const btn = document.getElementById('btnLiveContext');
+      if (btn) {
+        btn.textContent = '⚪ Live Screen: Off';
+        btn.classList.remove('active');
+      }
+    }
+
+    async function captureLiveStreamBlob() {
+      if (!liveScreenStream || !liveVideoEl || !liveVideoEl.videoWidth) return null;
+      const c = document.createElement('canvas');
+      c.width = liveVideoEl.videoWidth;
+      c.height = liveVideoEl.videoHeight;
+      c.getContext('2d').drawImage(liveVideoEl, 0, 0);
+      return await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.85));
+    }
 
     function initApp() {
       if (loggedInUser) {
@@ -809,17 +878,18 @@
     async function sendMessage() {
       const input = document.getElementById('userInput');
       const query = input.value.trim();
-      if (!query && !attachedFile && !attachedUrl) return;
+      if (!query && !attachedFile && !attachedUrl && !liveScreenStream) return;
       input.value = '';
 
       if (currentConv.messages.length === 0) {
-        const autoTitle = query || (attachedFile ? attachedFile.name : attachedUrl);
+        const autoTitle = query || (attachedFile ? attachedFile.name : (attachedUrl || 'Live Screen Analysis'));
         currentConv.title = autoTitle.length > 24 ? autoTitle.slice(0, 24) + '...' : autoTitle;
         document.getElementById('currentChatTitle').textContent = currentConv.title;
         renderConversationList();
       }
 
       const history = buildHistoryString();
+      const isSimpleGreeting = /^(hi|hey|hello|hola|yo|thanks|thank you|ok|okay|bye)[!.?]*$/i.test(query);
 
       if (attachedUrl) {
         const url = attachedUrl;
@@ -869,6 +939,32 @@
         const endpoint = isImg ? '/process-image/' : '/process-file/';
         try {
           const res = await fetch(endpoint, { method: 'POST', body: formData });
+          const data = await res.json();
+          loadingEl.remove();
+          const reply = data.gemini_response || ('Error: ' + (data.error || 'Unknown error'));
+          currentConv.messages.push({ sender: 'SnipTutor', text: reply });
+          appendMessageDOM('SnipTutor', reply);
+          if (loggedInUser) syncConversation(currentConv);
+        } catch (err) {
+          loadingEl.remove();
+          appendMessageDOM('SnipTutor', 'Connection Error: ' + err.message);
+        }
+      } else if (liveScreenStream && !isSimpleGreeting) {
+        const activeQuery = query || 'Explain what is on my screen and help me solve it.';
+        currentConv.messages.push({ sender: 'You', text: activeQuery });
+        appendMessageDOM('You', activeQuery);
+        if (loggedInUser) syncConversation(currentConv);
+
+        const loadingEl = appendLoadingDOM();
+        try {
+          const blob = await captureLiveStreamBlob();
+          const formData = new FormData();
+          formData.append('file', new File([blob], 'live_screen.jpg', { type: 'image/jpeg' }));
+          formData.append('prompt', activeQuery);
+          formData.append('mode', currentMode);
+          if (history) formData.append('history', history);
+
+          const res = await fetch('/process-image/', { method: 'POST', body: formData });
           const data = await res.json();
           loadingEl.remove();
           const reply = data.gemini_response || ('Error: ' + (data.error || 'Unknown error'));
