@@ -1,4 +1,4 @@
-﻿# Environment variables
+# Environment variables
 .env
 
 # Python cache
@@ -8,11 +8,17 @@ __pycache__/
 
 # Java build output
 frontend/bin/
+build/
+dist/
 *.class
+*.zip
 
-# Temporary screenshots and logs
+# Temporary screenshots, local DB, and logs
 screenshot.png
 *.log
+*.db
+*.db-wal
+*.db-shm
 
 # IDE settings
 .vscode/

@@ -16,6 +16,12 @@ public class Conversation implements Serializable {
         this.messages = new ArrayList<>();
     }
 
+    public Conversation(String id, String title) {
+        this.id = (id != null && !id.isEmpty()) ? id : UUID.randomUUID().toString();
+        this.title = title;
+        this.messages = new ArrayList<>();
+    }
+
     public String getId() { return id; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }

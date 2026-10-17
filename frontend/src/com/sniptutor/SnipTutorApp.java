@@ -56,8 +56,9 @@ public class SnipTutorApp extends Application {
         });
         hotkeyManager.register();
 
-        // Show window on initial launch
+        // Show window and apply default 28% side-docking
         stage.show();
+        Platform.runLater(() -> controller.applyInitialDock());
     }
 
     private void setupSystemTray() {
@@ -90,10 +91,11 @@ public class SnipTutorApp extends Application {
 
             MenuItem exitItem = new MenuItem("❌ Exit SnipTutor");
             exitItem.addActionListener(e -> {
+                ChatController.restoreLocalOsWorkArea();
                 try {
                     java.net.http.HttpClient.newHttpClient().send(
                         java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create("http://127.0.0.1:8000/restore-os-workarea/"))
+                            .uri(java.net.URI.create(ChatController.BACKEND_URL + "/restore-os-workarea/"))
                             .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
                             .build(),
                         java.net.http.HttpResponse.BodyHandlers.discarding()

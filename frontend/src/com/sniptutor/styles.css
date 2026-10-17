@@ -1,0 +1,119 @@
+/* SnipTutor Global Dark UI Stylesheet */
+
+.root {
+    -fx-background-color: #131314;
+    -fx-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+
+/* ScrollPane Clean Dark Styling */
+.scroll-pane {
+    -fx-background: #131314;
+    -fx-background-color: #131314;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: #131314;
+}
+
+/* Completely eliminate horizontal scrollbar */
+.scroll-pane .scroll-bar:horizontal {
+    -fx-opacity: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+    -fx-min-height: 0;
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .scroll-bar:horizontal .track,
+.scroll-pane .scroll-bar:horizontal .thumb,
+.scroll-pane .scroll-bar:horizontal .increment-button,
+.scroll-pane .scroll-bar:horizontal .decrement-button {
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+    -fx-opacity: 0;
+    -fx-padding: 0;
+}
+
+/* Minimalist vertical scrollbar (No white lines or overlapping tracks) */
+.scroll-pane .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 6px;
+    -fx-padding: 0;
+}
+
+.scroll-pane .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.scroll-pane .scroll-bar:vertical .thumb {
+    -fx-background-color: #3c4043;
+    -fx-background-radius: 4px;
+}
+
+.scroll-pane .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #5f6368;
+}
+
+.scroll-pane .scroll-bar:vertical .increment-button,
+.scroll-pane .scroll-bar:vertical .decrement-button {
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+    -fx-opacity: 0;
+    -fx-padding: 0;
+}
+
+/* Code block scroll pane: sleek dark horizontal scrollbar inside black division */
+.code-scroll-pane {
+    -fx-background: #0d1117;
+    -fx-background-color: #0d1117;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.code-scroll-pane > .viewport {
+    -fx-background-color: #0d1117;
+}
+
+.code-scroll-pane .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-height: 6px;
+    -fx-max-height: 6px;
+    -fx-min-height: 6px;
+    -fx-opacity: 1;
+    -fx-padding: 0;
+}
+
+.code-scroll-pane .scroll-bar:horizontal .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-pref-height: 6px;
+    -fx-max-height: 6px;
+    -fx-min-height: 6px;
+    -fx-opacity: 1;
+}
+
+.code-scroll-pane .scroll-bar:horizontal .thumb {
+    -fx-background-color: #30363d;
+    -fx-background-radius: 4px;
+    -fx-pref-height: 6px;
+    -fx-max-height: 6px;
+    -fx-min-height: 6px;
+    -fx-opacity: 1;
+}
+
+.code-scroll-pane .scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: #58a6ff;
+}
+
+.code-scroll-pane .scroll-bar:horizontal .increment-button,
+.code-scroll-pane .scroll-bar:horizontal .decrement-button {
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+    -fx-opacity: 0;
+    -fx-padding: 0;
+}
+

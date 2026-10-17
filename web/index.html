@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnipTutor — Universal AI Side-Workflow Companion</title>
+  <style>
+    :root {
+      --bg-main: #131314;
+      --bg-surface: #1e1f20;
+      --bg-elevated: #2b2c2f;
+      --border-color: #3c4043;
+      --text-primary: #e3e3e3;
+      --text-secondary: #9aa0a6;
+      --accent-blue: #8ab4f8;
+      --accent-primary: #1a73e8;
+      --accent-purple: #c58af9;
+      --code-bg: #0d1117;
+      --code-header: #161b22;
+      --code-border: #30363d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header Toolbar */
+    .toolbar {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--bg-elevated);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .btn-icon {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: none;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    .btn-icon:hover {
+      background: #383a3e;
+    }
+
+    .toolbar-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-primary);
+      margin-left: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .spacer {
+      flex: 1;
+    }
+
+    .pill-btn {
+      background: var(--bg-elevated);
+      color: #cccccc;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 5px 11px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .pill-btn:hover {
+      background: #35373b;
+      color: #ffffff;
+    }
+    .pill-btn.active {
+      background: var(--accent-primary);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .pill-btn.snip-btn {
+      color: #ffffff;
+      border-color: var(--border-color);
+    }
+
+    /* Main Chat Stream */
+    .chat-viewport {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px 14px 24px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .chat-viewport::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-viewport::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+
+    .bubble-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 100%;
+    }
+
+    .sender-label {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .sender-user { color: var(--accent-blue); }
+    .sender-ai { color: var(--accent-purple); }
+
+    .message-card {
+      border-radius: 16px;
+      padding: 14px 18px;
+      border: 1px solid var(--bg-elevated);
+      line-height: 1.55;
+      font-size: 13.5px;
+      width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .message-user {
+      background-color: var(--bg-elevated);
+      border-color: var(--border-color);
+      color: #e3e3e3;
+    }
+    .message-ai {
+      background-color: var(--bg-surface);
+      border-color: var(--bg-elevated);
+      color: #d1d5db;
+    }
+
+    .attached-preview-img {
+      max-width: 260px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+      display: block;
+    }
+
+    /* Markdown Typography inside Message Card */
+    .md-h1 { color: #ffffff; font-size: 17px; font-weight: 700; margin: 8px 0 4px; }
+    .md-h2 { color: var(--accent-blue); font-size: 15px; font-weight: 700; margin: 8px 0 4px; }
+    .md-h3 { color: var(--accent-purple); font-size: 14px; font-weight: 700; margin: 6px 0 4px; }
+    .md-p { margin: 4px 0; }
+    .md-list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 3px 0 3px 4px;
+    }
+    .md-marker {
+      color: var(--accent-purple);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .inline-code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12.5px;
+      color: #93c5fd;
+      background: rgba(147, 197, 253, 0.1);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* Code Block with Full Bottom Visibility */
+    .code-block-container {
+      background-color: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 8px;
+      margin: 8px 0;
+      overflow: hidden;
+    }
+    .code-block-header {
+      background-color: var(--code-header);
+      border-bottom: 1px solid var(--code-border);
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .code-lang {
+      color: #8b949e;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .copy-code-btn {
+      background: transparent;
+      color: #c9d1d9;
+      border: 1px solid var(--code-border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-code-btn.copied {
+      background: #238636;
+      color: #ffffff;
+      border-color: #238636;
+      font-weight: 700;
+    }
+    .code-scroll-area {
+      overflow-x: auto;
+      overflow-y: visible;
+      padding: 12px 16px 18px 14px; /* generous bottom padding so last line is 100% visible */
+      background-color: var(--code-bg);
+    }
+    .code-scroll-area::-webkit-scrollbar {
+      height: 6px;
+    }
+    .code-scroll-area::-webkit-scrollbar-thumb {
+      background: var(--code-border);
+      border-radius: 4px;
+    }
+    .code-scroll-area::-webkit-scrollbar-thumb:hover {
+      background: #58a6ff;
+    }
+    .code-pre {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #e6edf3;
+      white-space: pre;
+      margin: 0;
+    }
+
+    /* Follow-up Suggestion Chips */
+    .followup-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .followup-chip {
+      background: var(--bg-surface);
+      color: var(--accent-blue);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .followup-chip:hover {
+      background: var(--bg-elevated);
+      color: #d2e3fc;
+      border-color: var(--accent-blue);
+    }
+
+    /* Bottom Prompt Bar */
+    .bottom-bar-wrapper {
+      padding: 8px 12px 14px 12px;
+      background-color: var(--bg-main);
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .prompt-container {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--bg-elevated);
+      border-radius: 20px;
+      padding: 8px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .chip-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .context-chip {
+      background-color: var(--bg-elevated);
+      border-radius: 10px;
+      padding: 4px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--text-primary);
+      max-width: 100%;
+    }
+    .chip-close {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .prompt-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+    .circle-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .btn-attach {
+      background-color: var(--bg-elevated);
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+    .btn-send {
+      background-color: var(--accent-primary);
+      color: #ffffff;
+    }
+    .prompt-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 13.5px;
+      padding: 4px 0;
+    }
+    .prompt-input::placeholder {
+      color: #8e918f;
+    }
+
+    /* Attach Popup Menu */
+    .attach-menu {
+      position: absolute;
+      bottom: 42px;
+      left: 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 6px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      z-index: 30;
+      min-width: 280px;
+    }
+    .attach-menu.open { display: flex; }
+    .attach-menu-item {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .attach-menu-item:hover {
+      background: var(--bg-elevated);
+    }
+
+    /* Sidebar Drawer */
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 40;
+    }
+    .sidebar-backdrop.open { display: flex; }
+    .sidebar-drawer {
+      width: 280px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--bg-elevated);
+      height: 100%;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 4px 0 18px rgba(0,0,0,0.6);
+    }
+    .conv-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .conv-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 12.5px;
+      color: #c4c7c5;
+    }
+    .conv-item.active, .conv-item:hover {
+      background: var(--bg-elevated);
+      color: #ffffff;
+    }
+    .conv-item-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Modal (Auth & Screen Crop) */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 22px;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-input {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+    }
+
+    /* Interactive Screen Snip Canvas Overlay */
+    #snipOverlayModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #snipOverlayModal.open { display: flex; }
+    #snipCanvas {
+      border: 2px solid #4285F4;
+      cursor: crosshair;
+      max-width: 92vw;
+      max-height: 82vh;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Toolbar -->
+  <div class="toolbar">
+    <button class="btn-icon" onclick="toggleSidebar()" title="Conversations">☰</button>
+    <span id="currentChatTitle" class="toolbar-title">SnipTutor</span>
+    <div class="spacer"></div>
+    <button class="pill-btn snip-btn" onclick="startBrowserScreenSnip()" title="Capture & crop any window or screen">📸 Snip Screen</button>
+    <button id="btnStudent" class="pill-btn active" onclick="setMode('Student')">🎓 Student</button>
+    <button id="btnDeveloper" class="pill-btn" onclick="setMode('Developer')">💻 Dev</button>
+  </div>
+
+  <!-- Messages Stream -->
+  <div id="chatViewport" class="chat-viewport"></div>
+
+  <!-- Bottom Prompt Box -->
+  <div class="bottom-bar-wrapper">
+    <div class="prompt-container">
+      <div class="chip-bar">
+        <div id="attachmentChip" class="context-chip" style="display:none;">
+          <span id="attachmentChipIcon">📄</span>
+          <span id="attachmentChipText">Attached</span>
+          <button class="chip-close" onclick="clearAttachment()">✕</button>
+        </div>
+      </div>
+
+      <div class="prompt-input-row">
+        <button class="circle-btn btn-attach" onclick="toggleAttachMenu(event)" title="Attach File, URL, or Screenshot">➕</button>
+        <div id="attachMenu" class="attach-menu">
+          <button class="attach-menu-item" onclick="triggerFileUpload()">📁 Upload File (PDF, PPT, DOC, Excel, Code, Image)</button>
+          <button class="attach-menu-item" onclick="promptUrlAttachment()">🌐 Attach Web URL / Article Link</button>
+          <button class="attach-menu-item" onclick="startBrowserScreenSnip()">📸 Snip Screen Region (Live Capture)</button>
+        </div>
+        <input type="file" id="hiddenFileInput" style="display:none" onchange="handleFileSelected(event)" />
+        <input type="text" id="userInput" class="prompt-input" placeholder="Ask SnipTutor about your screen, code, document, or URL... (Ctrl+V to paste image)" onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button class="circle-btn btn-send" onclick="sendMessage()" title="Send">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar Drawer -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="if(event.target===this) toggleSidebar()">
+    <div class="sidebar-drawer">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <strong style="font-size:15px;">✨ SnipTutor</strong>
+        <button class="chip-close" onclick="toggleSidebar()" style="font-size:14px;">✕</button>
+      </div>
+      <button class="pill-btn" style="padding:9px 14px;border-radius:18px;width:100%;justify-content:flex-start;" onclick="createNewChat()">➕ &nbsp;New Chat</button>
+      <div style="font-size:11px;color:var(--text-secondary);padding:4px 4px 0;">Conversations</div>
+      <div id="convList" class="conv-list"></div>
+      <div style="border-top:1px solid var(--bg-elevated);padding-top:8px;">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--bg-elevated);padding:8px 10px;border-radius:12px;">
+          <span>👤</span>
+          <div style="flex:1;overflow:hidden;">
+            <div id="userNameLabel" style="font-size:12px;font-weight:700;">Guest</div>
+            <div id="userStatusLabel" style="font-size:10px;color:var(--text-secondary);">Local Session</div>
+          </div>
+          <button id="btnAuth" class="pill-btn active" style="padding:4px 10px;font-size:11px;" onclick="handleAuthClick()">Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="modal-backdrop" onclick="if(event.target===this) closeAuthModal()">
+    <div class="modal-card">
+      <h3 style="text-align:center;">✨ SnipTutor Account</h3>
+      <p style="font-size:11.5px;color:var(--text-secondary);text-align:center;">Sign in to sync your conversations across devices.</p>
+      <div style="display:flex;gap:6px;background:var(--bg-main);padding:3px;border-radius:10px;">
+        <button id="tabLogin" class="pill-btn active" style="flex:1;justify-content:center;" onclick="switchAuthTab(false)">Sign In</button>
+        <button id="tabRegister" class="pill-btn" style="flex:1;justify-content:center;" onclick="switchAuthTab(true)">Create Account</button>
+      </div>
+      <input id="authUsername" class="modal-input" type="text" placeholder="Username" />
+      <input id="authPassword" class="modal-input" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') submitAuth()" />
+      <div id="authError" style="color:#f28b82;font-size:11.5px;min-height:16px;"></div>
+      <button id="btnAuthSubmit" class="pill-btn active" style="justify-content:center;padding:9px;" onclick="submitAuth()">Sign In</button>
+    </div>
+  </div>
+
+  <!-- Interactive Screen Snip Crop Overlay -->
+  <div id="snipOverlayModal">
+    <div style="margin-bottom:10px;color:#e3e3e3;font-size:13px;display:flex;gap:12px;align-items:center;">
+      <span>🖱️ Drag on the captured screen below to snip a region (or click <b>Use Full Screen</b>)</span>
+      <button class="pill-btn active" onclick="useFullCapturedScreen()">Use Full Screen</button>
+      <button class="pill-btn" onclick="closeSnipOverlay()">Cancel</button>
+    </div>
+    <canvas id="snipCanvas"></canvas>
+  </div>
+
+  <script>
+    let currentMode = 'Student';
+    let conversations = [];
+    let currentConv = null;
+    let attachedFile = null;
+    let attachedUrl = null;
+    let isImageAttach = false;
+    let loggedInUser = JSON.parse(localStorage.getItem('sniptutor_user') || 'null');
+    let isRegisterMode = false;
+
+    function initApp() {
+      if (loggedInUser) {
+        updateAuthUI();
+        loadConversationsFromServer();
+      } else {
+        createNewChat();
+      }
+      document.addEventListener('click', (e) => {
+        const menu = document.getElementById('attachMenu');
+        if (!e.target.closest('.prompt-input-row')) menu.classList.remove('open');
+      });
+      // Support Ctrl+V image paste anywhere
+      window.addEventListener('paste', (e) => {
+        if (!e.clipboardData) return;
+        for (const item of e.clipboardData.items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) setFileAttachment(file);
+          }
+        }
+      });
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('btnStudent').classList.toggle('active', mode === 'Student');
+      document.getElementById('btnDeveloper').classList.toggle('active', mode === 'Developer');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebarBackdrop').classList.toggle('open');
+    }
+
+    function toggleAttachMenu(e) {
+      e.stopPropagation();
+      document.getElementById('attachMenu').classList.toggle('open');
+    }
+
+    function triggerFileUpload() {
+      document.getElementById('attachMenu').classList.remove('open');
+      document.getElementById('hiddenFileInput').click();
+    }
+
+    function handleFileSelected(e) {
+      if (e.target.files && e.target.files[0]) {
+        setFileAttachment(e.target.files[0]);
+        e.target.value = '';
+      }
+    }
+
+    function setFileAttachment(file) {
+      attachedFile = file;
+      attachedUrl = null;
+      const ext = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
+      isImageAttach = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'].includes(ext) || file.type.startsWith('image/');
+      document.getElementById('attachmentChipIcon').textContent = isImageAttach ? '🖼️' : '📄';
+      document.getElementById('attachmentChipText').textContent = `${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)`;
+      document.getElementById('attachmentChip').style.display = 'inline-flex';
+      document.getElementById('userInput').focus();
+    }
+
+    function promptUrlAttachment() {
+      document.getElementById('attachMenu').classList.remove('open');
+      const url = prompt('Enter Web URL to analyze:', 'https://');
+      if (url && url.trim() && url.trim() !== 'https://') {
+        attachedUrl = url.trim();
+        attachedFile = null;
+        isImageAttach = false;
+        document.getElementById('attachmentChipIcon').textContent = '🌐';
+        document.getElementById('attachmentChipText').textContent = attachedUrl.length > 42 ? attachedUrl.slice(0, 42) + '...' : attachedUrl;
+        document.getElementById('attachmentChip').style.display = 'inline-flex';
+        document.getElementById('userInput').focus();
+      }
+    }
+
+    function clearAttachment() {
+      attachedFile = null;
+      attachedUrl = null;
+      isImageAttach = false;
+      document.getElementById('attachmentChip').style.display = 'none';
+    }
+
+    // Live Browser Screen Capture & Region Snip
+    let capturedSourceCanvas = null;
+    async function startBrowserScreenSnip() {
+      document.getElementById('attachMenu').classList.remove('open');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Screen capture is not supported in this browser. You can press Win+Shift+S and Ctrl+V to paste any screenshot!');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        await video.play();
+        await new Promise(r => setTimeout(r, 150));
+
+        capturedSourceCanvas = document.createElement('canvas');
+        capturedSourceCanvas.width = video.videoWidth;
+        capturedSourceCanvas.height = video.videoHeight;
+        capturedSourceCanvas.getContext('2d').drawImage(video, 0, 0);
+
+        stream.getTracks().forEach(t => t.stop());
+        openSnipCropModal(capturedSourceCanvas);
+      } catch (err) {
+        console.log('Screen capture cancelled:', err);
+      }
+    }
+
+    function openSnipCropModal(sourceCanvas) {
+      const modal = document.getElementById('snipOverlayModal');
+      const canvas = document.getElementById('snipCanvas');
+      canvas.width = sourceCanvas.width;
+      canvas.height = sourceCanvas.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(sourceCanvas, 0, 0);
+      modal.classList.add('open');
+
+      let dragging = false, sx = 0, sy = 0;
+      canvas.onmousedown = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+        dragging = true;
+      };
+      canvas.onmousemove = (e) => {
+        if (!dragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
+        ctx.drawImage(sourceCanvas, 0, 0);
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const x = Math.min(sx, cx), y = Math.min(sy, cy), w = Math.abs(cx - sx), h = Math.abs(cy - sy);
+        if (w > 2 && h > 2) {
+          ctx.drawImage(sourceCanvas, x, y, w, h, x, y, w, h);
+          ctx.strokeStyle = '#4285F4';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x, y, w, h);
+        }
+      };
+      canvas.onmouseup = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        const rect = canvas.getBoundingClientRect();
+        const ex = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const ey = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const x = Math.min(sx, ex), y = Math.min(sy, ey), w = Math.abs(ex - sx), h = Math.abs(ey - sy);
+        if (w > 10 && h > 10) {
+          const out = document.createElement('canvas');
+          out.width = w;
+          out.height = h;
+          out.getContext('2d').drawImage(sourceCanvas, x, y, w, h, 0, 0, w, h);
+          out.toBlob(blob => {
+            setFileAttachment(new File([blob], `Snip_${Date.now()}.png`, { type: 'image/png' }));
+            closeSnipOverlay();
+          }, 'image/png');
+        }
+      };
+    }
+
+    function useFullCapturedScreen() {
+      if (!capturedSourceCanvas) return;
+      capturedSourceCanvas.toBlob(blob => {
+        setFileAttachment(new File([blob], `Screen_${Date.now()}.png`, { type: 'image/png' }));
+        closeSnipOverlay();
+      }, 'image/png');
+    }
+
+    function closeSnipOverlay() {
+      document.getElementById('snipOverlayModal').classList.remove('open');
+    }
+
+    // Conversations Management
+    function createNewChat() {
+      const conv = {
+        id: (crypto.randomUUID ? crypto.randomUUID() : 'conv-' + Date.now()),
+        title: 'Chat ' + (conversations.length + 1),
+        messages: []
+      };
+      conversations.unshift(conv);
+      selectConversation(conv);
+      document.getElementById('sidebarBackdrop').classList.remove('open');
+      if (loggedInUser) syncConversation(conv);
+    }
+
+    function selectConversation(conv) {
+      currentConv = conv;
+      document.getElementById('currentChatTitle').textContent = conv.title;
+      renderConversationList();
+      renderMessages();
+    }
+
+    function renderConversationList() {
+      const box = document.getElementById('convList');
+      box.innerHTML = '';
+      conversations.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'conv-item' + (c === currentConv ? ' active' : '');
+        row.innerHTML = `<span>💬</span><span class="conv-item-title"></span>`;
+        row.querySelector('.conv-item-title').textContent = c.title;
+        row.onclick = () => {
+          selectConversation(c);
+          toggleSidebar();
+        };
+        box.appendChild(row);
+      });
+    }
+
+    function renderMessages() {
+      const viewport = document.getElementById('chatViewport');
+      viewport.innerHTML = '';
+      if (!currentConv) return;
+      currentConv.messages.forEach(m => appendMessageDOM(m.sender, m.text, m.image_url));
+    }
+
+    function buildHistoryString() {
+      if (!currentConv) return '';
+      return currentConv.messages.map(m => `${m.sender}: ${m.text}`).join('\n');
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const query = input.value.trim();
+      if (!query && !attachedFile && !attachedUrl) return;
+      input.value = '';
+
+      if (currentConv.messages.length === 0) {
+        const autoTitle = query || (attachedFile ? attachedFile.name : attachedUrl);
+        currentConv.title = autoTitle.length > 24 ? autoTitle.slice(0, 24) + '...' : autoTitle;
+        document.getElementById('currentChatTitle').textContent = currentConv.title;
+        renderConversationList();
+      }
+
+      const history = buildHistoryString();
+
+      if (attachedUrl) {
+        const url = attachedUrl;
+        clearAttachment();
+        const display = `🌐 [Attached URL: ${url}]\n${query || 'Please analyze and explain this webpage.'}`;
+        currentConv.messages.push({ sender: 'You', text: display });
+        appendMessageDOM('You', display);
+        if (loggedInUser) syncConversation(currentConv);
+
+        const loadingEl = appendLoadingDOM();
+        try {
+          const res = await fetch('/process-url/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, prompt: query, history, mode: currentMode })
+          });
+          const data = await res.json();
+          loadingEl.remove();
+          const reply = data.gemini_response || ('Error: ' + (data.error || 'Unknown error'));
+          currentConv.messages.push({ sender: 'SnipTutor', text: reply });
+          appendMessageDOM('SnipTutor', reply);
+          if (loggedInUser) syncConversation(currentConv);
+        } catch (err) {
+          loadingEl.remove();
+          appendMessageDOM('SnipTutor', 'Connection Error: ' + err.message);
+        }
+      } else if (attachedFile) {
+        const file = attachedFile;
+        const isImg = isImageAttach;
+        const previewUrl = isImg ? URL.createObjectURL(file) : null;
+        clearAttachment();
+
+        const display = isImg
+          ? (query || '[Uploaded Screenshot]')
+          : `📁 [Attached: ${file.name}]\n${query || 'Please analyze this file and break down its key contents.'}`;
+        currentConv.messages.push({ sender: 'You', text: display, image_url: previewUrl });
+        appendMessageDOM('You', display, previewUrl);
+        if (loggedInUser) syncConversation(currentConv);
+
+        const loadingEl = appendLoadingDOM();
+        const formData = new FormData();
+        formData.append('file', file);
+        if (query) formData.append('prompt', query);
+        formData.append('mode', currentMode);
+        if (history) formData.append('history', history);
+
+        const endpoint = isImg ? '/process-image/' : '/process-file/';
+        try {
+          const res = await fetch(endpoint, { method: 'POST', body: formData });
+          const data = await res.json();
+          loadingEl.remove();
+          const reply = data.gemini_response || ('Error: ' + (data.error || 'Unknown error'));
+          currentConv.messages.push({ sender: 'SnipTutor', text: reply });
+          appendMessageDOM('SnipTutor', reply);
+          if (loggedInUser) syncConversation(currentConv);
+        } catch (err) {
+          loadingEl.remove();
+          appendMessageDOM('SnipTutor', 'Connection Error: ' + err.message);
+        }
+      } else {
+        currentConv.messages.push({ sender: 'You', text: query });
+        appendMessageDOM('You', query);
+        if (loggedInUser) syncConversation(currentConv);
+
+        const loadingEl = appendLoadingDOM();
+        try {
+          const res = await fetch('/process-text/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: query, history, mode: currentMode })
+          });
+          const data = await res.json();
+          loadingEl.remove();
+          const reply = data.gemini_response || ('Error: ' + (data.error || 'Unknown error'));
+          currentConv.messages.push({ sender: 'SnipTutor', text: reply });
+          appendMessageDOM('SnipTutor', reply);
+          if (loggedInUser) syncConversation(currentConv);
+        } catch (err) {
+          loadingEl.remove();
+          appendMessageDOM('SnipTutor', 'Connection Error: ' + err.message);
+        }
+      }
+    }
+
+    function appendLoadingDOM() {
+      const viewport = document.getElementById('chatViewport');
+      const group = document.createElement('div');
+      group.className = 'bubble-group';
+      group.innerHTML = `
+        <div class="sender-label sender-ai">✨ SnipTutor</div>
+        <div class="message-card message-ai" style="display:flex;align-items:center;gap:8px;color:#9aa0a6;font-style:italic;">
+          <span style="color:#c58af9;font-style:normal;font-weight:bold;">✦</span>
+          <span>Reading prompt & synthesizing response...</span>
+        </div>
+      `;
+      viewport.appendChild(group);
+      viewport.scrollTop = viewport.scrollHeight;
+      return group;
+    }
+
+    function appendMessageDOM(sender, text, imageUrl = null) {
+      const isUser = sender === 'You';
+      const viewport = document.getElementById('chatViewport');
+      const group = document.createElement('div');
+      group.className = 'bubble-group';
+
+      const label = document.createElement('div');
+      label.className = 'sender-label ' + (isUser ? 'sender-user' : 'sender-ai');
+      label.textContent = isUser ? '👤 You' : '✨ SnipTutor';
+
+      const card = document.createElement('div');
+      card.className = 'message-card ' + (isUser ? 'message-user' : 'message-ai');
+
+      if (imageUrl) {
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.className = 'attached-preview-img';
+        card.appendChild(img);
+      }
+
+      card.appendChild(renderMarkdownDOM(text, isUser));
+      group.appendChild(label);
+      group.appendChild(card);
+      viewport.appendChild(group);
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+
+    // Rich Markdown & Full-Visibility Code Block Renderer
+    function renderMarkdownDOM(markdownText, isUser) {
+      const root = document.createElement('div');
+      if (!markdownText) return root;
+
+      const lines = markdownText.split(/\r?\n/);
+      let i = 0;
+      let inFollowUp = false;
+      let followUpBox = null;
+
+      while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const lower = trimmed.toLowerCase();
+
+        const isFollowUpHeader = (lower.includes('follow-up') || lower.includes('follow up') || lower.includes('suggested next')) &&
+          (trimmed.startsWith('#') || trimmed.startsWith('**') || trimmed.endsWith(':') || trimmed.includes('💬'));
+
+        if (isFollowUpHeader && !isUser) {
+          inFollowUp = true;
+          followUpBox = document.createElement('div');
+          followUpBox.className = 'followup-chips';
+          root.appendChild(followUpBox);
+          i++;
+          continue;
+        }
+
+        if (inFollowUp) {
+          if (/^(\*|-|•|\d+\.)\s+/.test(trimmed)) {
+            const rawQ = trimmed.replace(/^[\*\-•\d\.]+\s*/, '').replace(/\*\*/g, '').replace(/^\[|\]$/g, '').trim();
+            if (rawQ && followUpBox) {
+              const chip = document.createElement('button');
+              chip.className = 'followup-chip';
+              chip.textContent = rawQ;
+              const cleanPrompt = rawQ.replace(/^(💡|🔍|⚡|🔹|💬|❓)\s*/, '').trim();
+              chip.onclick = () => {
+                document.getElementById('userInput').value = cleanPrompt;
+                sendMessage();
+              };
+              followUpBox.appendChild(chip);
+            }
+            i++;
+            continue;
+          } else if (trimmed.startsWith('#')) {
+            inFollowUp = false;
+          } else if (!trimmed) {
+            i++;
+            continue;
+          }
+        }
+
+        // Code block ```lang
+        if (trimmed.startsWith('```')) {
+          let lang = trimmed.slice(3).trim().toUpperCase() || 'CODE';
+          const codeLines = [];
+          i++;
+          while (i < lines.length && !lines[i].trim().startsWith('```')) {
+            codeLines.push(lines[i]);
+            i++;
+          }
+          if (i < lines.length) i++;
+          const rawCode = codeLines.join('\n').replace(/^\n+|\s+$/g, '');
+
+          const block = document.createElement('div');
+          block.className = 'code-block-container';
+
+          const header = document.createElement('div');
+          header.className = 'code-block-header';
+          const langSpan = document.createElement('span');
+          langSpan.className = 'code-lang';
+          langSpan.textContent = '⚙️ ' + lang;
+
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'copy-code-btn';
+          copyBtn.textContent = '📋 Copy Code';
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(rawCode);
+            copyBtn.textContent = '✅ Copied!';
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+              copyBtn.textContent = '📋 Copy Code';
+              copyBtn.classList.remove('copied');
+            }, 1800);
+          };
+
+          header.appendChild(langSpan);
+          header.appendChild(copyBtn);
+
+          const scrollArea = document.createElement('div');
+          scrollArea.className = 'code-scroll-area';
+          const pre = document.createElement('pre');
+          pre.className = 'code-pre';
+          pre.textContent = rawCode;
+          scrollArea.appendChild(pre);
+
+          block.appendChild(header);
+          block.appendChild(scrollArea);
+          root.appendChild(block);
+          continue;
+        }
+
+        if (trimmed.startsWith('### ')) {
+          const h3 = document.createElement('div');
+          h3.className = 'md-h3';
+          h3.textContent = trimmed.slice(4).replace(/\*\*/g, '');
+          root.appendChild(h3);
+          i++; continue;
+        }
+        if (trimmed.startsWith('## ')) {
+          const h2 = document.createElement('div');
+          h2.className = 'md-h2';
+          h2.textContent = trimmed.slice(3).replace(/\*\*/g, '');
+          root.appendChild(h2);
+          i++; continue;
+        }
+        if (trimmed.startsWith('# ')) {
+          const h1 = document.createElement('div');
+          h1.className = 'md-h1';
+          h1.textContent = trimmed.slice(2).replace(/\*\*/g, '');
+          root.appendChild(h1);
+          i++; continue;
+        }
+
+        if (trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+          const item = document.createElement('div');
+          item.className = 'md-list-item';
+          item.innerHTML = `<span class="md-marker">•</span><div>${formatInline(trimmed.slice(2))}</div>`;
+          root.appendChild(item);
+          i++; continue;
+        }
+
+        if (/^\d+\.\s+/.test(trimmed)) {
+          const dotIdx = trimmed.indexOf('.');
+          const num = trimmed.slice(0, dotIdx + 1);
+          const rest = trimmed.slice(dotIdx + 1).trim();
+          const item = document.createElement('div');
+          item.className = 'md-list-item';
+          item.innerHTML = `<span class="md-marker">${num}</span><div>${formatInline(rest)}</div>`;
+          root.appendChild(item);
+          i++; continue;
+        }
+
+        if (!trimmed) {
+          const spacer = document.createElement('div');
+          spacer.style.height = '4px';
+          root.appendChild(spacer);
+          i++; continue;
+        }
+
+        const p = document.createElement('div');
+        p.className = 'md-p';
+        p.innerHTML = formatInline(trimmed);
+        root.appendChild(p);
+        i++;
+      }
+      return root;
+    }
+
+    function formatInline(str) {
+      const escaped = str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return escaped
+        .replace(/`([^`]+)`/g, '<span class="inline-code">$1</span>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    }
+
+    // Authentication & Cloud Conversation Sync
+    function handleAuthClick() {
+      if (loggedInUser) {
+        if (confirm(`Sign out from @${loggedInUser.username}?`)) {
+          loggedInUser = null;
+          localStorage.removeItem('sniptutor_user');
+          updateAuthUI();
+          conversations = [];
+          createNewChat();
+        }
+      } else {
+        document.getElementById('authModal').classList.add('open');
+      }
+    }
+
+    function closeAuthModal() {
+      document.getElementById('authModal').classList.remove('open');
+    }
+
+    function switchAuthTab(register) {
+      isRegisterMode = register;
+      document.getElementById('tabLogin').classList.toggle('active', !register);
+      document.getElementById('tabRegister').classList.toggle('active', register);
+      document.getElementById('btnAuthSubmit').textContent = register ? 'Create Account' : 'Sign In';
+      document.getElementById('authError').textContent = '';
+    }
+
+    async function submitAuth() {
+      const username = document.getElementById('authUsername').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const errEl = document.getElementById('authError');
+      if (!username || !password) {
+        errEl.textContent = 'Please enter both username and password.';
+        return;
+      }
+      const endpoint = isRegisterMode ? '/auth/register/' : '/auth/login/';
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          loggedInUser = { user_id: data.user_id, username: data.username };
+          localStorage.setItem('sniptutor_user', JSON.stringify(loggedInUser));
+          updateAuthUI();
+          closeAuthModal();
+          loadConversationsFromServer();
+        } else {
+          errEl.textContent = data.message || 'Authentication failed.';
+        }
+      } catch (e) {
+        errEl.textContent = 'Connection error: ' + e.message;
+      }
+    }
+
+    function updateAuthUI() {
+      document.getElementById('userNameLabel').textContent = loggedInUser ? loggedInUser.username : 'Guest';
+      document.getElementById('userStatusLabel').textContent = loggedInUser ? 'Online • Synced' : 'Local Session';
+      document.getElementById('btnAuth').textContent = loggedInUser ? 'Logout' : 'Login';
+    }
+
+    async function loadConversationsFromServer() {
+      if (!loggedInUser) return;
+      try {
+        const res = await fetch(`/conversations/?user_id=${loggedInUser.user_id}`);
+        const data = await res.json();
+        if (data.status === 'ok' && Array.isArray(data.conversations) && data.conversations.length > 0) {
+          conversations = data.conversations;
+          selectConversation(conversations[0]);
+        } else {
+          conversations = [];
+          createNewChat();
+        }
+      } catch (e) {
+        if (conversations.length === 0) createNewChat();
+      }
+    }
+
+    async function syncConversation(conv) {
+      if (!loggedInUser || !conv) return;
+      try {
+        await fetch('/conversations/save/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: loggedInUser.user_id,
+            conversation_id: conv.id,
+            title: conv.title,
+            messages: conv.messages.map(m => ({ sender: m.sender, text: m.text, image_path: null }))
+          })
+        });
+      } catch (e) {}
+    }
+
+    initApp();
+  </script>
+</body>
+</html>
