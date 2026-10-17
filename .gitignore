@@ -22,3 +22,15 @@ screenshot.png
 
 # IDE settings
 .vscode/
+
+# Personal project notes, papers, and presentations (kept locally on PC only)
+7th sem project idea.txt
+project explanation zeroth review.txt
+project interface.txt
+*.pptx
+*.docx
+*.pdf
+SnipTutor_*_Diagram.png
+SnipTutor_*_Graphs.png
+SnipTutor_*_Breakdown.png
+ScreenTutor_*.png
