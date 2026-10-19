@@ -4,12 +4,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import os
 import io
+import re
+import time
+import math
 import shutil
 import secrets
 import sqlite3
 import hashlib
 import urllib.request
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -45,11 +48,50 @@ elif shutil.which("tesseract"):
 # Load environment variables
 load_dotenv()
 
+_gemini_client = None
+_cached_working_model = None
+
 def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set. Add it to your .env file or cloud environment variables.")
-    return genai.Client(api_key=api_key)
+    _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
+
+INSTANT_GREETINGS = {
+    "hi": "Hi there! 👋 I'm **SnipTutor**, your AI coding and study companion. Ask me anything, paste code, or snip your screen (`Ctrl + Shift + Space`) and I'll help right away!",
+    "hey": "Hey! 👋 Ready to help with code, debugging, or anything on your screen. What are we working on?",
+    "hello": "Hello! 👋 How can I help you today? You can ask a question, attach a file, or snip any part of your screen.",
+    "hola": "¡Hola! 👋 How can I help you with your code or studies today?",
+    "yo": "Yo! 👋 What are we building or debugging today?",
+    "sup": "Hey! 👋 Ready when you are — drop a question or snip your screen!",
+    "whats up": "Ready to help you debug, code, or learn! What's on your mind?",
+    "what's up": "Ready to help you debug, code, or learn! What's on your mind?",
+    "how are you": "I'm running at full speed and ready to help! ⚡ What are we working on today?",
+    "good morning": "Good morning! ☀️ What are we learning or building today?",
+    "good afternoon": "Good afternoon! 👋 How can I assist you right now?",
+    "good evening": "Good evening! 🌙 Ready to help you wrap up your tasks or debug code.",
+    "thanks": "You're very welcome! Let me know if you need anything else. ✨",
+    "thank you": "Happy to help! Feel free to ask anytime. ✨",
+    "thx": "Anytime! 👍 Let me know what's next.",
+    "ok": "Got it! Let me know whenever you're ready for the next step.",
+    "okay": "Sounds good! Ask away whenever you're ready.",
+    "bye": "See you later! Good luck with your project! 👋",
+}
+
+def get_instant_greeting_reply(user_text: Optional[str]) -> Optional[str]:
+    if not user_text:
+        return None
+    cleaned = re.sub(r"[^\w\s']", "", user_text.strip().lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if cleaned in INSTANT_GREETINGS:
+        return INSTANT_GREETINGS[cleaned]
+    if cleaned in ("hi sniptutor", "hey sniptutor", "hello sniptutor", "hi there", "hey there", "hello there"):
+        return INSTANT_GREETINGS["hi"]
+    return None
 
 app = FastAPI(title="SnipTutor API", version="2.0.0")
 
@@ -141,28 +183,74 @@ RESPONSE STYLE & FORMATTING GUIDELINES (Replicate Google Gemini Flash):
 * ⚡ [Specific follow-up on alternative approaches or optimizations]
 """
 
-def call_gemini(prompt: str, image_bytes: Optional[bytes] = None, mime_type: str = "image/png") -> str:
+def _generate_fast(gemini_client, model_name: str, contents_payload):
+    """Call Gemini with thinking_budget=0 for instant low-latency responses, falling back cleanly if unsupported."""
+    try:
+        fast_config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        )
+        return gemini_client.models.generate_content(
+            model=model_name,
+            contents=contents_payload,
+            config=fast_config,
+        )
+    except Exception as e:
+        err_str = str(e).lower()
+        if "thinking" in err_str or "invalid_argument" in err_str or "not supported" in err_str:
+            return gemini_client.models.generate_content(
+                model=model_name,
+                contents=contents_payload,
+            )
+        raise
+
+def call_gemini_with_metrics(
+    prompt: str,
+    image_bytes: Optional[bytes] = None,
+    mime_type: str = "image/png"
+) -> Tuple[str, Dict[str, Any]]:
+    global _cached_working_model
     gemini_client = get_gemini_client()
-    models_to_try = [
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
+    base_models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
         "gemini-flash-latest",
     ]
+    if _cached_working_model:
+        models_to_try = [_cached_working_model] + [m for m in base_models if m != _cached_working_model]
+    else:
+        models_to_try = base_models
+
     contents_payload = (
         [types.Part.from_bytes(data=image_bytes, mime_type=mime_type), prompt]
         if image_bytes
         else prompt
     )
     last_error = None
+    t0 = time.perf_counter()
     for model_name in models_to_try:
         try:
-            response = gemini_client.models.generate_content(
-                model=model_name,
-                contents=contents_payload
-            )
+            response = _generate_fast(gemini_client, model_name, contents_payload)
             if response and response.text:
-                return response.text
+                _cached_working_model = model_name
+                latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+                usage = getattr(response, "usage_metadata", None)
+                p_tok = getattr(usage, "prompt_token_count", None) if usage else None
+                c_tok = getattr(usage, "candidates_token_count", None) if usage else None
+                t_tok = getattr(usage, "total_token_count", None) if usage else None
+                if not p_tok:
+                    p_tok = math.ceil(len(prompt) / 4.0) + (258 if image_bytes else 0)
+                if not c_tok:
+                    c_tok = math.ceil(len(response.text) / 4.0)
+                if not t_tok:
+                    t_tok = p_tok + c_tok
+                return response.text, {
+                    "model_used": model_name,
+                    "prompt_tokens": int(p_tok),
+                    "completion_tokens": int(c_tok),
+                    "total_tokens": int(t_tok),
+                    "latency_ms": latency_ms,
+                }
         except Exception as e:
             last_error = e
             continue
@@ -171,17 +259,36 @@ def call_gemini(prompt: str, image_bytes: Optional[bytes] = None, mime_type: str
     if image_bytes is not None:
         for model_name in models_to_try:
             try:
-                response = gemini_client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
+                response = _generate_fast(gemini_client, model_name, prompt)
                 if response and response.text:
-                    return response.text
+                    _cached_working_model = model_name
+                    latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+                    usage = getattr(response, "usage_metadata", None)
+                    p_tok = getattr(usage, "prompt_token_count", None) if usage else None
+                    c_tok = getattr(usage, "candidates_token_count", None) if usage else None
+                    t_tok = getattr(usage, "total_token_count", None) if usage else None
+                    if not p_tok:
+                        p_tok = math.ceil(len(prompt) / 4.0)
+                    if not c_tok:
+                        c_tok = math.ceil(len(response.text) / 4.0)
+                    if not t_tok:
+                        t_tok = p_tok + c_tok
+                    return response.text, {
+                        "model_used": model_name,
+                        "prompt_tokens": int(p_tok),
+                        "completion_tokens": int(c_tok),
+                        "total_tokens": int(t_tok),
+                        "latency_ms": latency_ms,
+                    }
             except Exception as e:
                 last_error = e
                 continue
 
     raise last_error if last_error else RuntimeError("Failed to generate response from Gemini API")
+
+def call_gemini(prompt: str, image_bytes: Optional[bytes] = None, mime_type: str = "image/png") -> str:
+    text, _ = call_gemini_with_metrics(prompt, image_bytes=image_bytes, mime_type=mime_type)
+    return text
 
 WEB_INDEX_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
 
@@ -208,10 +315,23 @@ class TextInput(BaseModel):
     text: str
     history: Optional[str] = None
     mode: Optional[str] = "Student"
+    user_id: Optional[int] = None
+    username: Optional[str] = None
 
 @app.post("/process-text/")
-def process_text(input: TextInput):
+def process_text(input: TextInput, request: Request):
     try:
+        instant_reply = get_instant_greeting_reply(input.text)
+        if instant_reply:
+            fast_metrics = {
+                "model_used": "gemini-2.5-flash-fastpath",
+                "prompt_tokens": max(1, math.ceil(len(input.text or "") / 4.0)),
+                "completion_tokens": math.ceil(len(instant_reply) / 4.0),
+                "total_tokens": max(1, math.ceil((len(input.text or "") + len(instant_reply)) / 4.0)),
+                "latency_ms": 4.2,
+            }
+            return {"input": input.text, "gemini_response": instant_reply, "usage": fast_metrics}
+
         mode_instruction = (
             "Mode: Student (Provide comprehensive, high-scoring, clear pedagogical solutions and detailed explanations.)"
             if input.mode == "Student"
@@ -230,25 +350,58 @@ def process_text(input: TextInput):
 
 Please provide your comprehensive SnipTutor response:"""
 
-        response_text = call_gemini(context_prompt)
-        return {"input": input.text, "gemini_response": response_text}
+        response_text, metrics = call_gemini_with_metrics(context_prompt)
+        log_usage_event(
+            endpoint="/process-text/",
+            mode=input.mode or "Student",
+            user_prompt=input.text,
+            history_text=input.history or "",
+            response_text=response_text,
+            attachment_type="Text",
+            media_tokens=0,
+            metrics=metrics,
+            client_ip=request.client.host if request.client else "127.0.0.1",
+            user_id=input.user_id,
+            username=input.username,
+        )
+        return {"input": input.text, "gemini_response": response_text, "usage": metrics}
     except Exception as e:
         return {"error": str(e)}
 
 @app.post("/process-image/")
 async def process_image(
+    request: Request,
     file: UploadFile = File(...),
     prompt: Optional[str] = Form(None),
     mode: Optional[str] = Form("Student"),
-    history: Optional[str] = Form(None)
+    history: Optional[str] = Form(None),
+    user_id: Optional[int] = Form(None),
+    username: Optional[str] = Form(None)
 ):
     try:
+        # Instant fast-path if the user just typed a greeting while Live Screen Context was active
+        instant_reply = get_instant_greeting_reply(prompt)
+        if instant_reply:
+            fast_metrics = {
+                "model_used": "gemini-2.5-flash-fastpath",
+                "prompt_tokens": max(1, math.ceil(len(prompt or "") / 4.0)),
+                "completion_tokens": math.ceil(len(instant_reply) / 4.0),
+                "total_tokens": max(1, math.ceil((len(prompt or "") + len(instant_reply)) / 4.0)),
+                "latency_ms": 5.0,
+            }
+            return {
+                "extracted_text": "",
+                "user_question": prompt,
+                "gemini_response": instant_reply,
+                "usage": fast_metrics,
+            }
+
         contents = await file.read()
         extracted_text = ""
         optimized_bytes = contents
         mime_type = file.content_type if (file.content_type and file.content_type.startswith("image/")) else "image/png"
 
-        # Fast preprocessing: resize if large to speed up both Tesseract OCR & Gemini upload
+        # Fast preprocessing: resize & JPEG-encode in ~10ms for fast multimodal Gemini Vision upload (skip slow synchronous CPU Tesseract OCR)
         try:
             nparr = np.frombuffer(contents, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -259,12 +412,10 @@ async def process_image(
                     resized = cv2.resize(img, (1280, int(h * scale)), interpolation=cv2.INTER_AREA)
                 else:
                     resized = img
-                success, encoded_jpg = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                success, encoded_jpg = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 if success:
                     optimized_bytes = encoded_jpg.tobytes()
                     mime_type = "image/jpeg"
-                gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-                extracted_text = pytesseract.image_to_string(gray, config='--oem 3 --psm 6').strip()
         except Exception:
             pass
 
@@ -283,20 +434,37 @@ async def process_image(
 --- CONVERSATION HISTORY ---
 {history if history else "[Start of conversation]"}
 
---- SCREENSHOT OCR SUPPLEMENT ---
-{extracted_text if extracted_text else "[Analyze the attached screenshot image directly using your vision capabilities]"}
+--- SCREENSHOT CONTEXT ---
+[Analyze the attached screenshot image directly using your native vision capabilities]
 
 --- USER QUESTION ABOUT SCREENSHOT ---
 {user_question}
 
 Please provide your comprehensive SnipTutor response:"""
 
-        response_text = call_gemini(full_prompt, image_bytes=optimized_bytes, mime_type=mime_type)
+        response_text, metrics = call_gemini_with_metrics(full_prompt, image_bytes=optimized_bytes, mime_type=mime_type)
+        fname = (file.filename or "screenshot.png")
+        att_type = "Live Screen Context" if "LiveContext" in fname else "Screen Snip / Image"
+        media_toks = 258
+        log_usage_event(
+            endpoint="/process-image/",
+            mode=mode or "Student",
+            user_prompt=user_question,
+            history_text=history or "",
+            response_text=response_text,
+            attachment_type=att_type,
+            media_tokens=media_toks,
+            metrics=metrics,
+            client_ip=request.client.host if request.client else "127.0.0.1",
+            user_id=user_id,
+            username=username,
+        )
 
         return {
             "extracted_text": extracted_text,
             "user_question": user_question,
-            "gemini_response": response_text
+            "gemini_response": response_text,
+            "usage": metrics
         }
     except Exception as e:
         return {"error": str(e)}
@@ -401,10 +569,13 @@ def extract_file_content(file_bytes: bytes, filename: str) -> str:
 
 @app.post("/process-file/")
 async def process_file(
+    request: Request,
     file: UploadFile = File(...),
     prompt: Optional[str] = Form(None),
     mode: Optional[str] = Form("Student"),
-    history: Optional[str] = Form(None)
+    history: Optional[str] = Form(None),
+    user_id: Optional[int] = Form(None),
+    username: Optional[str] = Form(None)
 ):
     try:
         file_bytes = await file.read()
@@ -444,14 +615,31 @@ Please provide your comprehensive SnipTutor response:"""
                 ".gif": "image/gif",
                 ".bmp": "image/bmp",
             }
-            response_text = call_gemini(full_prompt, image_bytes=file_bytes, mime_type=mime_map.get(ext, "image/png"))
+            response_text, metrics = call_gemini_with_metrics(full_prompt, image_bytes=file_bytes, mime_type=mime_map.get(ext, "image/png"))
+            media_toks = 258 + math.ceil(len(extracted_content) / 4.0)
         else:
-            response_text = call_gemini(full_prompt)
+            response_text, metrics = call_gemini_with_metrics(full_prompt)
+            media_toks = math.ceil(len(extracted_content) / 4.0)
+
+        log_usage_event(
+            endpoint="/process-file/",
+            mode=mode or "Student",
+            user_prompt=user_question,
+            history_text=history or "",
+            response_text=response_text,
+            attachment_type=f"Document ({ext or 'file'})",
+            media_tokens=media_toks,
+            metrics=metrics,
+            client_ip=request.client.host if request.client else "127.0.0.1",
+            user_id=user_id,
+            username=username,
+        )
 
         return {
             "filename": filename,
             "extracted_length": len(extracted_content),
-            "gemini_response": response_text
+            "gemini_response": response_text,
+            "usage": metrics
         }
     except Exception as e:
         return {"error": str(e)}
@@ -461,19 +649,21 @@ class UrlRequest(BaseModel):
     prompt: Optional[str] = None
     mode: Optional[str] = "Student"
     history: Optional[str] = None
+    user_id: Optional[int] = None
+    username: Optional[str] = None
 
 @app.post("/process-url/")
-def process_url(req: UrlRequest):
+def process_url(req: UrlRequest, request: Request):
     try:
         url = req.url.strip()
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
 
-        request = urllib.request.Request(
+        http_req = urllib.request.Request(
             url,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         )
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with urllib.request.urlopen(http_req, timeout=12) as response:
             html = response.read().decode('utf-8', errors='replace')
 
         soup = BeautifulSoup(html, 'html.parser')
@@ -510,17 +700,31 @@ def process_url(req: UrlRequest):
 
 Please provide your comprehensive SnipTutor response:"""
 
-        response_text = call_gemini(full_prompt)
+        response_text, metrics = call_gemini_with_metrics(full_prompt)
+        log_usage_event(
+            endpoint="/process-url/",
+            mode=req.mode or "Student",
+            user_prompt=user_question,
+            history_text=req.history or "",
+            response_text=response_text,
+            attachment_type="Web URL",
+            media_tokens=math.ceil(len(page_body) / 4.0),
+            metrics=metrics,
+            client_ip=request.client.host if request.client else "127.0.0.1",
+            user_id=req.user_id,
+            username=req.username,
+        )
         return {
             "url": url,
             "title": page_title,
-            "gemini_response": response_text
+            "gemini_response": response_text,
+            "usage": metrics
         }
     except Exception as e:
         return {"error": f"Failed to fetch and analyze URL: {str(e)}"}
 
 # ==============================================================================
-# DATABASE SETUP & USER AUTHENTICATION / CONVERSATION PERSISTENCE
+# DATABASE SETUP & USER AUTHENTICATION / CONVERSATION PERSISTENCE / TELEMETRY
 # ==============================================================================
 DB_PATH = os.getenv("SNIPTUTOR_DB_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "sniptutor.db"))
 
@@ -529,6 +733,101 @@ def get_db_connection():
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
+
+def backfill_historical_usage_logs(conn: sqlite3.Connection):
+    cursor = conn.cursor()
+    existing_count = cursor.execute("SELECT COUNT(*) FROM usage_logs").fetchone()[0]
+    if existing_count > 0:
+        return
+
+    convs = cursor.execute("""
+        SELECT c.id, c.user_id, u.username, c.title, c.created_at, c.updated_at
+        FROM conversations c
+        LEFT JOIN users u ON c.user_id = u.id
+        ORDER BY c.created_at ASC
+    """).fetchall()
+
+    sys_overhead_tokens = 400
+    for cid, uid, uname, title, c_created, c_updated in convs:
+        uname = uname or f"User-{uid}"
+        msgs = cursor.execute(
+            "SELECT id, sender, text, image_path, timestamp FROM messages WHERE conversation_id=? ORDER BY id ASC",
+            (cid,)
+        ).fetchall()
+        history_chars = 0
+        i = 0
+        turn_idx = 0
+        while i < len(msgs):
+            m = msgs[i]
+            if m[1] == "You":
+                u_text = m[2] or ""
+                img_path = m[3]
+                msg_ts = m[4] or c_updated or c_created
+                ai_text = ""
+                if i + 1 < len(msgs) and msgs[i + 1][1] == "SnipTutor":
+                    ai_text = msgs[i + 1][2] or ""
+                    i += 2
+                else:
+                    i += 1
+                turn_idx += 1
+
+                u_tok = max(1, math.ceil(len(u_text) / 4.0))
+                hist_tok = math.ceil(history_chars / 4.0)
+                sys_tok = sys_overhead_tokens
+
+                is_doc = ("[Attached:" in u_text or "📁" in u_text)
+                is_img = (img_path is not None) or (
+                    "screenshot" in ai_text.lower()
+                    or "screen" in ai_text.lower()
+                    or "whatt do u see" in u_text.lower()
+                    or "what to u see" in u_text.lower()
+                    or "reading a book" in u_text.lower()
+                    or "what is the answer" in u_text.lower()
+                )
+                if is_doc:
+                    att_type = "Document (.docx)"
+                    endpoint = "/process-file/"
+                    vis_tok = 1200
+                elif img_path is not None:
+                    att_type = "Screen Snip / Image"
+                    endpoint = "/process-image/"
+                    vis_tok = 258 + 160
+                elif is_img:
+                    att_type = "Live Screen Context"
+                    endpoint = "/process-image/"
+                    vis_tok = 258 + 160
+                else:
+                    att_type = "Text"
+                    endpoint = "/process-text/"
+                    vis_tok = 0
+
+                in_tok = u_tok + hist_tok + sys_tok + vis_tok
+                out_tok = math.ceil(len(ai_text) / 4.0) if ai_text else 0
+                tot_tok = in_tok + out_tok
+                code_blocks = len(re.findall(r"```", ai_text)) // 2
+                mode_inferred = "Developer" if (code_blocks >= 2 or "code" in u_text.lower() or "program" in u_text.lower()) else "Student"
+                est_latency = round(850.0 + out_tok * 3.2 + (420.0 if vis_tok > 0 else 0.0), 1)
+
+                cursor.execute("""
+                    INSERT INTO usage_logs (
+                        timestamp, user_id, username, client_ip, conversation_id,
+                        endpoint, mode, model_used, prompt_chars, response_chars,
+                        user_tokens, system_tokens, history_tokens, media_tokens,
+                        prompt_tokens, completion_tokens, total_tokens,
+                        latency_ms, attachment_type, code_blocks_count, is_backfilled
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """, (
+                    msg_ts, uid, uname, "127.0.0.1", cid,
+                    endpoint, mode_inferred, "gemini-3.8-flash", len(u_text), len(ai_text),
+                    u_tok, sys_tok, hist_tok, vis_tok,
+                    in_tok, out_tok, tot_tok,
+                    est_latency, att_type, code_blocks
+                ))
+
+                history_chars += len(f"You: {u_text}\n") + (len(f"SnipTutor: {ai_text}\n") if ai_text else 0)
+            else:
+                i += 1
+    conn.commit()
 
 def init_db():
     conn = get_db_connection()
@@ -562,10 +861,87 @@ def init_db():
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usage_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER,
+            username TEXT DEFAULT 'Guest',
+            client_ip TEXT DEFAULT '127.0.0.1',
+            conversation_id TEXT,
+            endpoint TEXT NOT NULL,
+            mode TEXT DEFAULT 'Student',
+            model_used TEXT DEFAULT 'gemini-3.8-flash',
+            prompt_chars INTEGER DEFAULT 0,
+            response_chars INTEGER DEFAULT 0,
+            user_tokens INTEGER DEFAULT 0,
+            system_tokens INTEGER DEFAULT 400,
+            history_tokens INTEGER DEFAULT 0,
+            media_tokens INTEGER DEFAULT 0,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            latency_ms REAL DEFAULT 0.0,
+            attachment_type TEXT DEFAULT 'Text',
+            code_blocks_count INTEGER DEFAULT 0,
+            is_backfilled INTEGER DEFAULT 0
+        )
+    """)
     conn.commit()
+    try:
+        backfill_historical_usage_logs(conn)
+    except Exception:
+        pass
     conn.close()
 
 init_db()
+
+def log_usage_event(
+    endpoint: str,
+    mode: str,
+    user_prompt: str,
+    history_text: str,
+    response_text: str,
+    attachment_type: str,
+    media_tokens: int,
+    metrics: Dict[str, Any],
+    client_ip: str = "127.0.0.1",
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        u_tok = max(1, math.ceil(len(user_prompt or "") / 4.0))
+        sys_tok = 400
+        hist_tok = math.ceil(len(history_text or "") / 4.0)
+        p_tok = metrics.get("prompt_tokens") or (u_tok + sys_tok + hist_tok + media_tokens)
+        c_tok = metrics.get("completion_tokens") or math.ceil(len(response_text or "") / 4.0)
+        t_tok = metrics.get("total_tokens") or (p_tok + c_tok)
+        code_blocks = len(re.findall(r"```", response_text or "")) // 2
+        resolved_username = username or ("Guest" if not user_id else f"User-{user_id}")
+        cursor.execute("""
+            INSERT INTO usage_logs (
+                user_id, username, client_ip, conversation_id,
+                endpoint, mode, model_used, prompt_chars, response_chars,
+                user_tokens, system_tokens, history_tokens, media_tokens,
+                prompt_tokens, completion_tokens, total_tokens,
+                latency_ms, attachment_type, code_blocks_count, is_backfilled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """, (
+            user_id, resolved_username, client_ip, conversation_id,
+            endpoint, mode, metrics.get("model_used", "gemini-3.8-flash"),
+            len(user_prompt or ""), len(response_text or ""),
+            u_tok, sys_tok, hist_tok, media_tokens,
+            int(p_tok), int(c_tok), int(t_tok),
+            float(metrics.get("latency_ms", 0.0)),
+            attachment_type, code_blocks
+        ))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
@@ -702,3 +1078,22 @@ def rename_conversation(req: RenameRequest):
     conn.commit()
     conn.close()
     return {"status": "ok"}
+
+@app.get("/api/analytics")
+def get_analytics_snapshot():
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    users = [dict(r) for r in cursor.execute("SELECT id, username, created_at FROM users ORDER BY id ASC").fetchall()]
+    conversations = [dict(r) for r in cursor.execute("SELECT id, user_id, title, created_at, updated_at FROM conversations ORDER BY created_at ASC").fetchall()]
+    messages = [dict(r) for r in cursor.execute("SELECT id, conversation_id, sender, text, image_path, timestamp FROM messages ORDER BY id ASC").fetchall()]
+    usage_logs = [dict(r) for r in cursor.execute("SELECT * FROM usage_logs ORDER BY id ASC").fetchall()]
+    conn.close()
+    return {
+        "status": "ok",
+        "users": users,
+        "conversations": conversations,
+        "messages": messages,
+        "usage_logs": usage_logs,
+    }
+

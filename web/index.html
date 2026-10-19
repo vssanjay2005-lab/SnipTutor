@@ -889,7 +889,28 @@
       }
 
       const history = buildHistoryString();
-      const isSimpleGreeting = /^(hi|hey|hello|hola|yo|thanks|thank you|ok|okay|bye)[!.?]*$/i.test(query);
+      const cleanedGreet = query.trim().toLowerCase().replace(/[^a-z0-9\s']/g, '').replace(/\s+/g, ' ').trim();
+      const instantGreetings = {
+        'hi': "Hi there! 👋 I'm **SnipTutor**, your AI coding and study companion. Ask me anything, paste code, or snip your screen and I'll help right away!",
+        'hi there': "Hi there! 👋 I'm **SnipTutor**, your AI coding and study companion. Ask me anything, paste code, or snip your screen and I'll help right away!",
+        'hey': "Hey! 👋 Ready to help with code, debugging, or anything on your screen. What are we working on?",
+        'hey there': "Hey! 👋 Ready to help with code, debugging, or anything on your screen. What are we working on?",
+        'hello': "Hello! 👋 How can I help you today? You can ask a question, attach a file, or snip any part of your screen.",
+        'hola': "¡Hola! 👋 How can I help you with your code or studies today?",
+        'yo': "Yo! 👋 What are we building or debugging today?",
+        'sup': "Hey! 👋 Ready when you are — drop a question or snip your screen!",
+        'how are you': "I'm running at full speed and ready to help! ⚡ What are we working on today?",
+        'good morning': "Good morning! ☀️ What are we learning or building today?",
+        'good afternoon': "Good afternoon! 👋 How can I assist you right now?",
+        'good evening': "Good evening! 🌙 Ready to help you wrap up your tasks or debug code.",
+        'thanks': "You're very welcome! Let me know if you need anything else. ✨",
+        'thank you': "Happy to help! Feel free to ask anytime. ✨",
+        'ok': "Got it! Let me know whenever you're ready for the next step.",
+        'okay': "Sounds good! Ask away whenever you're ready.",
+        'bye': "See you later! Good luck with your project! 👋"
+      };
+      const instantReply = instantGreetings[cleanedGreet] || null;
+      const isSimpleGreeting = Boolean(instantReply);
 
       if (attachedUrl) {
         const url = attachedUrl;
@@ -949,6 +970,13 @@
           loadingEl.remove();
           appendMessageDOM('SnipTutor', 'Connection Error: ' + err.message);
         }
+      } else if (instantReply) {
+        currentConv.messages.push({ sender: 'You', text: query });
+        appendMessageDOM('You', query);
+        currentConv.messages.push({ sender: 'SnipTutor', text: instantReply });
+        appendMessageDOM('SnipTutor', instantReply);
+        if (loggedInUser) syncConversation(currentConv);
+        fetch('/health').catch(() => {});
       } else if (liveScreenStream && !isSimpleGreeting) {
         const activeQuery = query || 'Explain what is on my screen and help me solve it.';
         currentConv.messages.push({ sender: 'You', text: activeQuery });

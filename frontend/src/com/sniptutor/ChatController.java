@@ -147,6 +147,74 @@ public class ChatController {
         }
         // Load persistent user session or create default guest chat
         loadSession();
+        // Immediately warm up the backend (wakes up Render cloud if asleep) and keep it warm
+        startBackendWarmupAndKeepAlive();
+    }
+
+    private void startBackendWarmupAndKeepAlive() {
+        Thread keepAliveThread = new Thread(() -> {
+            while (true) {
+                try {
+                    HttpRequest pingReq = HttpRequest.newBuilder()
+                        .uri(URI.create(BACKEND_URL + "/health"))
+                        .timeout(java.time.Duration.ofSeconds(30))
+                        .GET()
+                        .build();
+                    client.sendAsync(pingReq, HttpResponse.BodyHandlers.discarding());
+                    Thread.sleep(240_000); // Ping every 4 minutes so Render free tier never sleeps while app is open
+                } catch (InterruptedException ie) {
+                    break;
+                } catch (Exception ignored) {
+                    try { Thread.sleep(60_000); } catch (InterruptedException ie) { break; }
+                }
+            }
+        }, "SnipTutor-KeepAlive");
+        keepAliveThread.setDaemon(true);
+        keepAliveThread.start();
+    }
+
+    private String getInstantGreetingReply(String query) {
+        if (query == null) return null;
+        String cleaned = query.trim().toLowerCase().replaceAll("[^a-z0-9\\s']", "").replaceAll("\\s+", " ").trim();
+        switch (cleaned) {
+            case "hi":
+            case "hi there":
+            case "hi sniptutor":
+                return "Hi there! 👋 I'm **SnipTutor**, your AI coding and study companion. Ask me anything, paste code, or snip your screen (`Ctrl + Shift + Space`) and I'll help right away!";
+            case "hey":
+            case "hey there":
+            case "hey sniptutor":
+            case "yo":
+            case "sup":
+                return "Hey! 👋 Ready to help with code, debugging, or anything on your screen. What are we working on?";
+            case "hello":
+            case "hello there":
+            case "hello sniptutor":
+            case "hola":
+                return "Hello! 👋 How can I help you today? You can ask a question, attach a file, or snip any part of your screen.";
+            case "how are you":
+            case "whats up":
+            case "what's up":
+                return "I'm running at full speed and ready to help! ⚡ What are we working on today?";
+            case "good morning":
+                return "Good morning! ☀️ What are we learning or building today?";
+            case "good afternoon":
+                return "Good afternoon! 👋 How can I assist you right now?";
+            case "good evening":
+                return "Good evening! 🌙 Ready to help you wrap up your tasks or debug code.";
+            case "thanks":
+            case "thank you":
+            case "thx":
+                return "You're very welcome! Let me know if you need anything else. ✨";
+            case "ok":
+            case "okay":
+                return "Got it! Let me know whenever you're ready for the next step.";
+            case "bye":
+            case "goodbye":
+                return "See you later! Good luck with your project! 👋";
+            default:
+                return null;
+        }
     }
 
     @FXML
@@ -516,12 +584,21 @@ public class ChatController {
                 sendGenericFileToBackend(filePath, query, historyContext);
             }
         }
-        // 3. Zero-Click Live Screen Capture (skip heavy screen capture for simple greetings like 'hi'/'hey')
-        else if (isLiveContextActive && !query.toLowerCase().matches("^(hi|hey|hello|hola|yo|thanks|thank you|ok|okay|bye)[!.?]*$")) {
+        // 3. Instant Fast-Path for Casual Greetings ("hi", "hey", "hello", "thanks", etc.)
+        else if (getInstantGreetingReply(query) != null) {
+            String instantReply = getInstantGreetingReply(query);
+            currentConversation.addMessage("You", query, null);
+            displayMessageBubble("You", query, null);
+            currentConversation.addMessage("SnipTutor", instantReply, null);
+            displayMessageBubble("SnipTutor", instantReply, null);
+            if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+        }
+        // 4. Zero-Click Live Screen Capture
+        else if (isLiveContextActive) {
             String activeQuery = query.isEmpty() ? "Explain what is on my screen and help me solve it." : query;
             captureAndSendLiveContext(activeQuery, historyContext);
         }
-        // 4. Pure Text Query
+        // 5. Pure Text Query
         else {
             currentConversation.addMessage("You", query, null);
             displayMessageBubble("You", query, null);
@@ -550,13 +627,26 @@ public class ChatController {
                 );
                 java.awt.image.BufferedImage liveCapture = robot.createScreenCapture(area);
 
+                // Scale down to max 1280px width & convert to RGB JPEG (~150KB vs 3MB PNG -> 20x faster upload!)
+                int origW = liveCapture.getWidth();
+                int origH = liveCapture.getHeight();
+                int targetW = Math.min(origW, 1280);
+                int targetH = (int) Math.round((double) origH * targetW / origW);
+                java.awt.image.BufferedImage scaledRgb = new java.awt.image.BufferedImage(
+                    targetW, targetH, java.awt.image.BufferedImage.TYPE_INT_RGB
+                );
+                java.awt.Graphics2D g2d = scaledRgb.createGraphics();
+                g2d.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2d.drawImage(liveCapture, 0, 0, targetW, targetH, null);
+                g2d.dispose();
+
                 String userHome = System.getProperty("user.home");
                 java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
                 if (!snipDir.exists()) snipDir.mkdirs();
 
                 String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
-                java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".png");
-                javax.imageio.ImageIO.write(liveCapture, "png", liveFile);
+                java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".jpg");
+                javax.imageio.ImageIO.write(scaledRgb, "jpg", liveFile);
 
                 sendImageToBackendWithLoading(liveFile.toPath(), query, historyContext, loadingNode);
             } catch (Exception e) {
@@ -757,9 +847,11 @@ public class ChatController {
             }
 
             // File
+            String fName = filePath.getFileName().toString();
+            String imgMime = (fName.toLowerCase().endsWith(".jpg") || fName.toLowerCase().endsWith(".jpeg")) ? "image/jpeg" : "image/png";
             out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
-            out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + filePath.getFileName() + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
-            out.write(("Content-Type: image/png" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
+            out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + fName + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
+            out.write(("Content-Type: " + imgMime + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(Files.readAllBytes(filePath));
             out.write((CRLF + "--" + boundary + "--" + CRLF).getBytes(StandardCharsets.UTF_8));
 
