@@ -152,6 +152,7 @@ public class ChatController {
     }
 
     private void startBackendWarmupAndKeepAlive() {
+        AutoUpdater.checkInBackgroundAsync();
         Thread keepAliveThread = new Thread(() -> {
             while (true) {
                 try {
@@ -162,6 +163,7 @@ public class ChatController {
                         .build();
                     client.sendAsync(pingReq, HttpResponse.BodyHandlers.discarding());
                     Thread.sleep(240_000); // Ping every 4 minutes so Render free tier never sleeps while app is open
+                    AutoUpdater.checkInBackgroundAsync();
                 } catch (InterruptedException ie) {
                     break;
                 } catch (Exception ignored) {

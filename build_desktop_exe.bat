@@ -29,6 +29,9 @@ copy /Y frontend\src\com\sniptutor\styles.css frontend\bin\com\sniptutor\styles.
 
 echo [2/3] Packaging SnipTutor.jar and dependencies...
 jar --create --file build\input\SnipTutor.jar --main-class com.sniptutor.Launcher -C frontend\bin .
+if not exist "app_update" mkdir "app_update"
+copy /Y "build\input\SnipTutor.jar" "app_update\SnipTutor.jar" >nul
+powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 'app_update\SnipTutor.jar').Hash.ToLower() | Set-Content -NoNewline -Encoding UTF8 'app_update\version.txt'"
 copy /Y "lib\jnativehook-2.2.2.jar" "build\input\jnativehook-2.2.2.jar" >nul
 copy /Y "%PATH_TO_FX%\*.jar" "build\input\" >nul
 if exist "%PATH_TO_FX%\..\bin\*.dll" (

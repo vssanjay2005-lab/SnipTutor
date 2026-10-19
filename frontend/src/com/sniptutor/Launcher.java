@@ -6,6 +6,7 @@ package com.sniptutor;
  */
 public class Launcher {
     public static void main(String[] args) {
+        AutoUpdater.checkAndUpdateOnStartup(args);
         SnipTutorApp.main(args);
     }
 }
