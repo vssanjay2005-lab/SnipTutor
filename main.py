@@ -184,24 +184,23 @@ RESPONSE STYLE & FORMATTING GUIDELINES (Replicate Google Gemini Flash):
 """
 
 def _generate_fast(gemini_client, model_name: str, contents_payload):
-    """Call Gemini with thinking_budget=0 for instant low-latency responses, falling back cleanly if unsupported."""
-    try:
-        fast_config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0)
-        )
-        return gemini_client.models.generate_content(
-            model=model_name,
-            contents=contents_payload,
-            config=fast_config,
-        )
-    except Exception as e:
-        err_str = str(e).lower()
-        if "thinking" in err_str or "invalid_argument" in err_str or "not supported" in err_str:
+    """Call Gemini with low-latency settings, avoiding thinking config errors on flash-lite models."""
+    if "3.8" in model_name or "thinking" in model_name:
+        try:
+            fast_config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=0)
+            )
             return gemini_client.models.generate_content(
                 model=model_name,
                 contents=contents_payload,
+                config=fast_config,
             )
-        raise
+        except Exception:
+            pass
+    return gemini_client.models.generate_content(
+        model=model_name,
+        contents=contents_payload,
+    )
 
 def call_gemini_with_metrics(
     prompt: str,
@@ -211,12 +210,11 @@ def call_gemini_with_metrics(
     global _cached_working_model
     gemini_client = get_gemini_client()
     base_models = [
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-flash-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
     ]
-    if _cached_working_model:
+    if _cached_working_model and _cached_working_model in base_models:
         models_to_try = [_cached_working_model] + [m for m in base_models if m != _cached_working_model]
     else:
         models_to_try = base_models
