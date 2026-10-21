@@ -358,7 +358,7 @@ Please provide your comprehensive SnipTutor response:"""
             attachment_type="Text",
             media_tokens=0,
             metrics=metrics,
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=request.client.host if (request and request.client) else "127.0.0.1",
             user_id=input.user_id,
             username=input.username,
         )
