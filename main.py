@@ -212,7 +212,6 @@ def call_gemini_with_metrics(
     base_models = [
         "gemini-3.5-flash-lite",
         "gemini-3.5-flash",
-        "gemini-3.8-flash",
     ]
     if _cached_working_model and _cached_working_model in base_models:
         models_to_try = [_cached_working_model] + [m for m in base_models if m != _cached_working_model]
@@ -322,7 +321,7 @@ def process_text(input: TextInput, request: Request):
         instant_reply = get_instant_greeting_reply(input.text)
         if instant_reply:
             fast_metrics = {
-                "model_used": "gemini-2.5-flash-fastpath",
+                "model_used": "gemini-3.5-flash-fastpath",
                 "prompt_tokens": max(1, math.ceil(len(input.text or "") / 4.0)),
                 "completion_tokens": math.ceil(len(instant_reply) / 4.0),
                 "total_tokens": max(1, math.ceil((len(input.text or "") + len(instant_reply)) / 4.0)),
@@ -381,7 +380,7 @@ async def process_image(
         instant_reply = get_instant_greeting_reply(prompt)
         if instant_reply:
             fast_metrics = {
-                "model_used": "gemini-2.5-flash-fastpath",
+                "model_used": "gemini-3.5-flash-fastpath",
                 "prompt_tokens": max(1, math.ceil(len(prompt or "") / 4.0)),
                 "completion_tokens": math.ceil(len(instant_reply) / 4.0),
                 "total_tokens": max(1, math.ceil((len(prompt or "") + len(instant_reply)) / 4.0)),

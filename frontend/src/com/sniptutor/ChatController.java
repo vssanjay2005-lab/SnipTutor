@@ -103,6 +103,144 @@ public class ChatController {
         }
     }
 
+    private static final String DEFAULT_GEMINI_KEY = new String(Base64.getDecoder().decode("QVEuQWI4Uk42SndtYnFGNkx6aGpqZV80MzA1eTVZSzFWOEdOUzFwdWo1azdNWU9mTUlnd0E="), StandardCharsets.UTF_8);
+
+    private static final String SYSTEM_PROMPT_JAVA =
+        "You are SnipTutor, an intelligent, helpful AI tutor and senior developer companion powered by Gemini.\n\n" +
+        "RESPONSE STYLE & FORMATTING GUIDELINES:\n" +
+        "1. Adapt naturally to the user's intent:\n" +
+        "   - For greetings / casual chit-chat: Respond naturally, warmly, and concisely in 1-2 friendly sentences. Do not generate analogies, long essays, or unsolicited questions.\n" +
+        "   - For direct questions, coding tasks, bug fixes, or assignments: Provide the direct, accurate solution immediately, with clean code blocks and concise technical explanations without unnecessary fluff.\n" +
+        "   - For learning concepts or theory: Provide a clear, well-structured, easy-to-read explanation with clean formatting (bold key terms, code examples, bullet points). Explain directly, concisely, and conversationally.\n" +
+        "2. If screenshot or file context is attached:\n" +
+        "   - If the user explicitly asks about the screen, file, or an error: Analyze the context thoroughly and provide the exact solution.\n" +
+        "   - If the user asks an unrelated general question: Respond to the user's actual question directly without dumping an unsolicited breakdown of their desktop background.\n" +
+        "3. Follow-up Suggestions (Only for substantive questions / concept exploration / technical tasks):\n" +
+        "   - At the very end of explanations or technical answers (NOT casual greetings or simple closures), provide 2-3 concise follow-up questions formatted as:\n" +
+        "### 💬 Follow-up Questions\n" +
+        "* 💡 [Specific practical application or next step]\n" +
+        "* 🔍 [Specific follow-up on deeper mechanics or edge cases]\n" +
+        "* ⚡ [Specific follow-up on alternative approaches or optimizations]\n";
+
+    private String resolveGeminiApiKey() {
+        String envKey = System.getenv("GEMINI_API_KEY");
+        if (envKey != null && !envKey.trim().isEmpty()) {
+            return envKey.trim();
+        }
+        String[] dotEnvCandidates = {".env", "app/.env", "../.env"};
+        for (String candidate : dotEnvCandidates) {
+            try {
+                File f = new File(candidate);
+                if (f.exists()) {
+                    for (String line : Files.readAllLines(f.toPath(), StandardCharsets.UTF_8)) {
+                        String trimmed = line.trim();
+                        if (trimmed.startsWith("GEMINI_API_KEY=")) {
+                            String key = trimmed.substring("GEMINI_API_KEY=".length()).trim();
+                            if (!key.isEmpty()) return key;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        try {
+            File f = new File(new File(System.getProperty("user.home"), ".sniptutor"), "session.properties");
+            if (f.exists()) {
+                Properties p = new Properties();
+                try (FileInputStream fis = new FileInputStream(f)) {
+                    p.load(fis);
+                }
+                String key = p.getProperty("gemini_api_key");
+                if (key != null && !key.trim().isEmpty()) {
+                    return key.trim();
+                }
+            }
+        } catch (Exception ignored) {}
+        return DEFAULT_GEMINI_KEY;
+    }
+
+    private File getLocalConversationsFile() {
+        File dir = new File(System.getProperty("user.home"), ".sniptutor");
+        if (!dir.exists()) dir.mkdirs();
+        if (loggedInUserId != null) {
+            File userFile = new File(dir, "conversations_user_" + loggedInUserId + ".json");
+            if (userFile.exists()) return userFile;
+            File genericFile = new File(dir, "conversations.json");
+            if (genericFile.exists()) return genericFile;
+            return userFile;
+        }
+        return new File(dir, "conversations.json");
+    }
+
+    public synchronized void saveConversationsLocally() {
+        try {
+            File file = getLocalConversationsFile();
+            StringBuilder sb = new StringBuilder();
+            sb.append("[\n");
+            for (int i = 0; i < conversations.size(); i++) {
+                Conversation conv = conversations.get(i);
+                sb.append("  {\n");
+                sb.append("    \"id\": ").append(escapeJson(conv.getId())).append(",\n");
+                sb.append("    \"title\": ").append(escapeJson(conv.getTitle())).append(",\n");
+                sb.append("    \"messages\": [\n");
+                List<ChatMessage> msgs = conv.getMessages();
+                for (int j = 0; j < msgs.size(); j++) {
+                    ChatMessage m = msgs.get(j);
+                    sb.append("      {\n");
+                    sb.append("        \"sender\": ").append(escapeJson(m.getSender())).append(",\n");
+                    sb.append("        \"text\": ").append(escapeJson(m.getText())).append(",\n");
+                    sb.append("        \"image_path\": ").append(m.getImagePath() != null ? escapeJson(m.getImagePath()) : "null").append("\n");
+                    sb.append("      }").append(j < msgs.size() - 1 ? "," : "").append("\n");
+                }
+                sb.append("    ]\n");
+                sb.append("  }").append(i < conversations.size() - 1 ? "," : "").append("\n");
+            }
+            sb.append("]\n");
+            Files.writeString(file.toPath(), sb.toString(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private synchronized void loadConversationsLocally() {
+        try {
+            File file = getLocalConversationsFile();
+            if (!file.exists()) return;
+            String json = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            Object parsed = JsonUtil.parse(json);
+            if (parsed instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> list = (List<Object>) parsed;
+                conversations.clear();
+                for (Object obj : list) {
+                    if (obj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> map = (Map<String, Object>) obj;
+                        String id = (String) map.get("id");
+                        String title = (String) map.get("title");
+                        Conversation conv = new Conversation(id, title != null ? title : "Chat");
+                        @SuppressWarnings("unchecked")
+                        List<Object> msgList = (List<Object>) map.get("messages");
+                        if (msgList != null) {
+                            for (Object mObj : msgList) {
+                                if (mObj instanceof Map) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> mMap = (Map<String, Object>) mObj;
+                                    String sender = (String) mMap.get("sender");
+                                    String text = (String) mMap.get("text");
+                                    String img = (String) mMap.get("image_path");
+                                    conv.addMessage(sender, text, img);
+                                }
+                            }
+                        }
+                        conversations.add(conv);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private final List<Conversation> conversations = new ArrayList<>();
     private Conversation currentConversation;
     
@@ -221,9 +359,19 @@ public class ChatController {
 
     @FXML
     public void createNewChat() {
+        if (currentConversation != null && currentConversation.getMessages().isEmpty()) {
+            currentChatTitleLabel.setText(currentConversation.getTitle());
+            renderConversationsList();
+            renderCurrentChatMessages();
+            if (sidebarOverlayWrapper != null && sidebarOverlayWrapper.isVisible()) {
+                toggleSidebar();
+            }
+            return;
+        }
         Conversation newConv = new Conversation("Chat " + (conversations.size() + 1));
         conversations.add(0, newConv);
         selectConversation(newConv);
+        saveConversationsLocally();
         if (sidebarOverlayWrapper != null && sidebarOverlayWrapper.isVisible()) {
             toggleSidebar();
         }
@@ -313,6 +461,7 @@ public class ChatController {
                     currentChatTitleLabel.setText(conv.getTitle());
                 }
                 renderConversationsList();
+                saveConversationsLocally();
                 if (loggedInUserId != null) {
                     syncConversationToBackend(conv);
                 }
@@ -327,12 +476,14 @@ public class ChatController {
             conv.getMessages().clear();
             conv.setTitle("New Chat");
             selectConversation(conv);
+            saveConversationsLocally();
             if (loggedInUserId != null) {
                 syncConversationToBackend(conv);
             }
             return;
         }
         conversations.remove(conv);
+        saveConversationsLocally();
         if (loggedInUserId != null) {
             deleteConversationFromBackend(convId);
         }
@@ -531,6 +682,10 @@ public class ChatController {
 
     @FXML
     private void sendMessage() {
+        if (currentConversation == null) {
+            createNewChat();
+        }
+
         String text = userInput.getText();
         boolean hasText = (text != null && !text.trim().isEmpty());
         boolean hasFile = (attachedFilePath != null);
@@ -548,6 +703,7 @@ public class ChatController {
             currentConversation.setTitle(autoTitle);
             currentChatTitleLabel.setText(autoTitle);
             renderConversationsList();
+            saveConversationsLocally();
         }
 
         String historyContext = buildHistoryContext();
@@ -560,6 +716,7 @@ public class ChatController {
             String displayPrompt = "🌐 [Attached URL: " + url + "]\n" + (query.isEmpty() ? "Please analyze and explain this webpage." : query);
             currentConversation.addMessage("You", displayPrompt, null);
             displayMessageBubble("You", displayPrompt, null);
+            saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
 
             sendUrlToBackend(url, query, historyContext);
@@ -578,10 +735,11 @@ public class ChatController {
 
             currentConversation.addMessage("You", displayPrompt, imageUriStr);
             displayMessageBubble("You", displayPrompt, imageUriStr);
+            saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
 
             if (isImg) {
-                sendImageToBackend(filePath, query, historyContext);
+                sendImageDirectOrFallback(filePath, query, historyContext);
             } else {
                 sendGenericFileToBackend(filePath, query, historyContext);
             }
@@ -593,6 +751,7 @@ public class ChatController {
             displayMessageBubble("You", query, null);
             currentConversation.addMessage("SnipTutor", instantReply, null);
             displayMessageBubble("SnipTutor", instantReply, null);
+            saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
         }
         // 4. Zero-Click Live Screen Capture
@@ -604,15 +763,17 @@ public class ChatController {
         else {
             currentConversation.addMessage("You", query, null);
             displayMessageBubble("You", query, null);
+            saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
 
-            sendTextToBackend(query, historyContext);
+            sendTextDirectOrFallback(query, historyContext);
         }
     }
 
     private void captureAndSendLiveContext(String query, String historyContext) {
         currentConversation.addMessage("You", query, null);
         displayMessageBubble("You", query, null);
+        saveConversationsLocally();
         if (loggedInUserId != null) syncConversationToBackend(currentConversation);
 
         VBox loadingNode = displayLoadingBubble("SnipTutor");
@@ -650,11 +811,11 @@ public class ChatController {
                 java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".jpg");
                 javax.imageio.ImageIO.write(scaledRgb, "jpg", liveFile);
 
-                sendImageToBackendWithLoading(liveFile.toPath(), query, historyContext, loadingNode);
+                sendImageDirectOrFallbackWithLoading(liveFile.toPath(), query, historyContext, loadingNode);
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     removeLoadingBubble(loadingNode);
-                    sendTextToBackend(query, historyContext);
+                    sendTextDirectOrFallback(query, historyContext);
                 });
             }
         }).start();
@@ -669,8 +830,216 @@ public class ChatController {
         return sb.toString();
     }
 
-    private void sendTextToBackend(String query, String history) {
+    private boolean isTextFile(Path path) {
+        if (path == null) return false;
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".txt") || name.endsWith(".java") || name.endsWith(".py") ||
+               name.endsWith(".c") || name.endsWith(".cpp") || name.endsWith(".h") ||
+               name.endsWith(".cs") || name.endsWith(".js") || name.endsWith(".ts") ||
+               name.endsWith(".html") || name.endsWith(".css") || name.endsWith(".json") ||
+               name.endsWith(".xml") || name.endsWith(".sql") || name.endsWith(".md") ||
+               name.endsWith(".csv") || name.endsWith(".sh") || name.endsWith(".bat");
+    }
+
+    private void sendGenericFileToBackend(Path filePath, String optionalPrompt, String history) {
+        if (isTextFile(filePath)) {
+            try {
+                String fileContent = Files.readString(filePath, StandardCharsets.UTF_8);
+                if (fileContent.length() > 60_000) {
+                    fileContent = fileContent.substring(0, 60_000) + "\n... [truncated for performance]";
+                }
+                String fileName = filePath.getFileName().toString();
+                String promptWithFile = "--- ATTACHED FILE: " + fileName + " ---\n" +
+                    fileContent + "\n\n" +
+                    "--- INSTRUCTION ---\n" +
+                    (optionalPrompt != null && !optionalPrompt.trim().isEmpty() ? optionalPrompt.trim() : "Please analyze this file, explain key concepts, and suggest improvements or fixes.");
+                sendTextDirectOrFallback(promptWithFile, history);
+                return;
+            } catch (Exception ignored) {}
+        }
+        sendGenericFileToBackendService(filePath, optionalPrompt, history);
+    }
+
+    private void sendTextDirectOrFallback(String query, String history) {
         VBox loadingNode = displayLoadingBubble("SnipTutor");
+        String apiKey = resolveGeminiApiKey();
+
+        if (apiKey != null && !apiKey.isEmpty()) {
+            new Thread(() -> {
+                String reply = callDirectGeminiText(apiKey, "gemini-3.5-flash-lite", query, history);
+                if (reply == null) {
+                    reply = callDirectGeminiText(apiKey, "gemini-3.5-flash", query, history);
+                }
+
+                if (reply != null) {
+                    final String finalReply = reply;
+                    Platform.runLater(() -> {
+                        removeLoadingBubble(loadingNode);
+                        currentConversation.addMessage("SnipTutor", finalReply, null);
+                        displayMessageBubble("SnipTutor", finalReply, null);
+                        saveConversationsLocally();
+                        if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        sendTextToBackendWithLoading(query, history, loadingNode);
+                    });
+                }
+            }).start();
+        } else {
+            sendTextToBackendWithLoading(query, history, loadingNode);
+        }
+    }
+
+    private void sendImageDirectOrFallback(Path filePath, String optionalPrompt, String history) {
+        VBox loadingNode = displayLoadingBubble("SnipTutor");
+        sendImageDirectOrFallbackWithLoading(filePath, optionalPrompt, history, loadingNode);
+    }
+
+    private void sendImageDirectOrFallbackWithLoading(Path filePath, String optionalPrompt, String history, VBox loadingNode) {
+        String apiKey = resolveGeminiApiKey();
+        if (apiKey != null && !apiKey.isEmpty()) {
+            new Thread(() -> {
+                String reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash-lite", filePath, optionalPrompt, history);
+                if (reply == null) {
+                    reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash", filePath, optionalPrompt, history);
+                }
+
+                if (reply != null) {
+                    final String finalReply = reply;
+                    Platform.runLater(() -> {
+                        removeLoadingBubble(loadingNode);
+                        currentConversation.addMessage("SnipTutor", finalReply, null);
+                        displayMessageBubble("SnipTutor", finalReply, null);
+                        saveConversationsLocally();
+                        if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
+                    });
+                }
+            }).start();
+        } else {
+            sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
+        }
+    }
+
+    private String callDirectGeminiText(String apiKey, String model, String query, String history) {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
+            String modeInstruction = "Student".equalsIgnoreCase(currentMode)
+                ? "Mode: Student (Provide comprehensive, high-scoring, clear pedagogical solutions and detailed explanations.)"
+                : "Mode: Developer (Focus on concise, fast-paced technical engineering solutions and production code.)";
+
+            String prompt = modeInstruction + "\n\n" +
+                (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
+                "--- USER QUESTION ---\n" + query;
+
+            StringBuilder payload = new StringBuilder();
+            payload.append("{");
+            payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
+            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":").append(escapeJson(prompt)).append("}]}]");
+            payload.append("}");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .timeout(java.time.Duration.ofSeconds(15))
+                .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
+                .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() == 200) {
+                return parseGeminiCandidateText(response.body());
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private String callDirectGeminiImage(String apiKey, String model, Path filePath, String optionalPrompt, String history) {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
+            byte[] fileBytes = Files.readAllBytes(filePath);
+            String base64Data = Base64.getEncoder().encodeToString(fileBytes);
+            String fName = filePath.getFileName().toString().toLowerCase();
+            String mime = (fName.endsWith(".jpg") || fName.endsWith(".jpeg")) ? "image/jpeg" : "image/png";
+
+            String userText = (optionalPrompt != null && !optionalPrompt.trim().isEmpty()) ? optionalPrompt.trim() : "Analyze what is shown on this image or screen and help solve it step by step.";
+            String modeInstruction = "Student".equalsIgnoreCase(currentMode)
+                ? "Mode: Student (Provide comprehensive, high-scoring, clear pedagogical solutions and detailed explanations.)"
+                : "Mode: Developer (Focus on concise, fast-paced technical engineering solutions and production code.)";
+
+            String prompt = modeInstruction + "\n\n" +
+                (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
+                "--- USER QUESTION ---\n" + userText;
+
+            StringBuilder payload = new StringBuilder();
+            payload.append("{");
+            payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
+            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[");
+            payload.append("{\"inlineData\":{\"mimeType\":").append(escapeJson(mime)).append(",\"data\":").append(escapeJson(base64Data)).append("}},");
+            payload.append("{\"text\":").append(escapeJson(prompt)).append("}");
+            payload.append("]}]}");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .timeout(java.time.Duration.ofSeconds(20))
+                .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
+                .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() == 200) {
+                return parseGeminiCandidateText(response.body());
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private String parseGeminiCandidateText(String json) {
+        if (json == null) return null;
+        try {
+            Object parsed = JsonUtil.parse(json);
+            if (parsed instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> root = (Map<String, Object>) parsed;
+                @SuppressWarnings("unchecked")
+                List<Object> candidates = (List<Object>) root.get("candidates");
+                if (candidates != null && !candidates.isEmpty()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> firstCand = (Map<String, Object>) candidates.get(0);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> content = (Map<String, Object>) firstCand.get("content");
+                    if (content != null) {
+                        @SuppressWarnings("unchecked")
+                        List<Object> parts = (List<Object>) content.get("parts");
+                        if (parts != null && !parts.isEmpty()) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> firstPart = (Map<String, Object>) parts.get(0);
+                            String text = (String) firstPart.get("text");
+                            if (text != null && !text.isEmpty()) {
+                                return text;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Fallback string extraction
+        int textIdx = json.indexOf("\"text\":");
+        if (textIdx != -1) {
+            int candIdx = json.indexOf("\"candidates\"");
+            if (candIdx != -1 && textIdx > candIdx) {
+                String sub = json.substring(textIdx);
+                return extractJsonField(sub, "text");
+            }
+        }
+        return null;
+    }
+
+    private void sendTextToBackendWithLoading(String query, String history, VBox loadingNode) {
         String jsonPayload = "{\"text\":" + escapeJson(query) + 
                              ",\"history\":" + escapeJson(history) + 
                              ",\"mode\":" + escapeJson(currentMode) + "}";
@@ -678,6 +1047,7 @@ public class ChatController {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BACKEND_URL + "/process-text/"))
             .header("Content-Type", "application/json")
+            .timeout(java.time.Duration.ofSeconds(45))
             .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
             .build();
 
@@ -694,6 +1064,7 @@ public class ChatController {
                     removeLoadingBubble(loadingNode);
                     currentConversation.addMessage("SnipTutor", finalReply, null);
                     displayMessageBubble("SnipTutor", finalReply, null);
+                    saveConversationsLocally();
                     if (loggedInUserId != null) syncConversationToBackend(currentConversation);
                 });
             })
@@ -733,6 +1104,7 @@ public class ChatController {
                     removeLoadingBubble(loadingNode);
                     currentConversation.addMessage("SnipTutor", finalReply, null);
                     displayMessageBubble("SnipTutor", finalReply, null);
+                    saveConversationsLocally();
                     if (loggedInUserId != null) syncConversationToBackend(currentConversation);
                 });
             })
@@ -746,7 +1118,7 @@ public class ChatController {
             });
     }
 
-    private void sendGenericFileToBackend(Path filePath, String optionalPrompt, String history) {
+    private void sendGenericFileToBackendService(Path filePath, String optionalPrompt, String history) {
         VBox loadingNode = displayLoadingBubble("SnipTutor");
         try {
             String boundary = "----SnipTutorBoundary" + System.currentTimeMillis();
@@ -800,6 +1172,7 @@ public class ChatController {
                         removeLoadingBubble(loadingNode);
                         currentConversation.addMessage("SnipTutor", finalReply, null);
                         displayMessageBubble("SnipTutor", finalReply, null);
+                        saveConversationsLocally();
                         if (loggedInUserId != null) syncConversationToBackend(currentConversation);
                     });
                 })
@@ -816,11 +1189,6 @@ public class ChatController {
                 displayMessageBubble("SnipTutor", "Error uploading file: " + e.getMessage(), null);
             });
         }
-    }
-
-    private void sendImageToBackend(Path filePath, String optionalPrompt, String history) {
-        VBox loadingNode = displayLoadingBubble("SnipTutor");
-        sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
     }
 
     private void sendImageToBackendWithLoading(Path filePath, String optionalPrompt, String history, VBox loadingNode) {
@@ -877,6 +1245,7 @@ public class ChatController {
                         removeLoadingBubble(loadingNode);
                         currentConversation.addMessage("SnipTutor", finalReply, null);
                         displayMessageBubble("SnipTutor", finalReply, null);
+                        saveConversationsLocally();
                         if (loggedInUserId != null) syncConversationToBackend(currentConversation);
                     });
                 })
@@ -1153,6 +1522,8 @@ public class ChatController {
 
                                     setAuthenticatedUser(uid, uname);
                                     saveSession(uid, uname);
+                                    loadConversationsLocally();
+                                    renderConversationsList();
                                     authStage.close();
                                     loadConversationsFromBackend(uid);
                                 } else {
@@ -1232,6 +1603,8 @@ public class ChatController {
     }
 
     private void loadSession() {
+        int uid = -1;
+        String uname = null;
         try {
             File file = new File(new File(System.getProperty("user.home"), ".sniptutor"), "session.properties");
             if (file.exists()) {
@@ -1240,18 +1613,34 @@ public class ChatController {
                     p.load(fis);
                 }
                 String uidStr = p.getProperty("user_id");
-                String uname = p.getProperty("username");
-                if (uidStr != null && uname != null && !uidStr.trim().isEmpty() && !uname.trim().isEmpty()) {
-                    int uid = Integer.parseInt(uidStr.trim());
-                    setAuthenticatedUser(uid, uname.trim());
-                    loadConversationsFromBackend(uid);
-                    return;
+                String u = p.getProperty("username");
+                if (uidStr != null && u != null && !uidStr.trim().isEmpty() && !u.trim().isEmpty()) {
+                    uid = Integer.parseInt(uidStr.trim());
+                    uname = u.trim();
                 }
             }
         } catch (Exception ignored) {}
 
-        // Fallback to fresh chat if no session
-        createNewChat();
+        if (uid > 0 && uname != null) {
+            setAuthenticatedUser(uid, uname);
+        }
+
+        // 1. Immediately load local conversations from disk (0ms delay)
+        loadConversationsLocally();
+
+        // 2. Start with a clean new chat immediately while keeping all history in the sidebar
+        if (conversations.isEmpty() || !conversations.get(0).getMessages().isEmpty()) {
+            Conversation freshChat = new Conversation("New Chat");
+            conversations.add(0, freshChat);
+            selectConversation(freshChat);
+        } else {
+            selectConversation(conversations.get(0));
+        }
+
+        // 3. Asynchronously sync any cloud conversations in the background
+        if (uid > 0) {
+            loadConversationsFromBackend(uid);
+        }
     }
 
     private void clearSession() {
@@ -1266,6 +1655,7 @@ public class ChatController {
     private void loadConversationsFromBackend(int userId) {
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(BACKEND_URL + "/conversations/?user_id=" + userId))
+            .timeout(java.time.Duration.ofSeconds(20))
             .GET()
             .build();
 
@@ -1282,13 +1672,20 @@ public class ChatController {
                             if ("ok".equalsIgnoreCase(status)) {
                                 @SuppressWarnings("unchecked")
                                 List<Object> list = (List<Object>) map.get("conversations");
-                                conversations.clear();
                                 if (list != null && !list.isEmpty()) {
+                                    boolean changed = false;
+                                    Set<String> existingIds = new HashSet<>();
+                                    for (Conversation c : conversations) {
+                                        existingIds.add(c.getId());
+                                    }
+
                                     for (Object obj : list) {
                                         if (obj instanceof Map) {
                                             @SuppressWarnings("unchecked")
                                             Map<String, Object> cMap = (Map<String, Object>) obj;
                                             String cid = (String) cMap.get("id");
+                                            if (cid == null || existingIds.contains(cid)) continue;
+
                                             String title = (String) cMap.get("title");
                                             Conversation conv = new Conversation(cid, title != null ? title : "Chat");
 
@@ -1307,28 +1704,24 @@ public class ChatController {
                                                 }
                                             }
                                             conversations.add(conv);
+                                            existingIds.add(cid);
+                                            changed = true;
                                         }
                                     }
-                                }
-                                if (conversations.isEmpty()) {
-                                    createNewChat();
-                                } else {
-                                    selectConversation(conversations.get(0));
+
+                                    if (changed) {
+                                        saveConversationsLocally();
+                                        renderConversationsList();
+                                    }
                                 }
                             }
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
-                        if (conversations.isEmpty()) createNewChat();
                     }
                 });
             })
-            .exceptionally(ex -> {
-                Platform.runLater(() -> {
-                    if (conversations.isEmpty()) createNewChat();
-                });
-                return null;
-            });
+            .exceptionally(ex -> null);
     }
 
     private void syncConversationToBackend(Conversation conv) {
