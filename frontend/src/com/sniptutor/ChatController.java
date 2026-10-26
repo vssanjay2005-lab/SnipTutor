@@ -866,10 +866,7 @@ public class ChatController {
 
         if (apiKey != null && !apiKey.isEmpty()) {
             new Thread(() -> {
-                String reply = callDirectGeminiText(apiKey, "gemini-3.5-flash-lite", query, history);
-                if (reply == null) {
-                    reply = callDirectGeminiText(apiKey, "gemini-3.5-flash", query, history);
-                }
+                String reply = callDirectGeminiText(apiKey, "gemini-3.5-flash", query, history);
 
                 if (reply != null) {
                     final String finalReply = reply;
@@ -900,10 +897,7 @@ public class ChatController {
         String apiKey = resolveGeminiApiKey();
         if (apiKey != null && !apiKey.isEmpty()) {
             new Thread(() -> {
-                String reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash-lite", filePath, optionalPrompt, history);
-                if (reply == null) {
-                    reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash", filePath, optionalPrompt, history);
-                }
+                String reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash", filePath, optionalPrompt, history);
 
                 if (reply != null) {
                     final String finalReply = reply;
@@ -939,13 +933,14 @@ public class ChatController {
             StringBuilder payload = new StringBuilder();
             payload.append("{");
             payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
-            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":").append(escapeJson(prompt)).append("}]}]");
+            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":").append(escapeJson(prompt)).append("}]}],");
+            payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingBudget\":0},\"temperature\":0.7}");
             payload.append("}");
 
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
-                .timeout(java.time.Duration.ofSeconds(15))
+                .timeout(java.time.Duration.ofSeconds(10))
                 .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
                 .build();
 
@@ -980,12 +975,14 @@ public class ChatController {
             payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[");
             payload.append("{\"inlineData\":{\"mimeType\":").append(escapeJson(mime)).append(",\"data\":").append(escapeJson(base64Data)).append("}},");
             payload.append("{\"text\":").append(escapeJson(prompt)).append("}");
-            payload.append("]}]}");
+            payload.append("]}],");
+            payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingBudget\":0},\"temperature\":0.7}");
+            payload.append("}");
 
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
-                .timeout(java.time.Duration.ofSeconds(20))
+                .timeout(java.time.Duration.ofSeconds(12))
                 .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
                 .build();
 
@@ -1275,57 +1272,24 @@ public class ChatController {
         HBox messageBox = new HBox(8);
         messageBox.setAlignment(Pos.CENTER_LEFT);
         messageBox.setMaxWidth(580);
-        messageBox.setStyle("-fx-background-color: #1e1f20; -fx-background-radius: 16px; -fx-padding: 10px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 16px;");
+        messageBox.setStyle("-fx-background-color: #1e1f20; -fx-background-radius: 16px; -fx-padding: 8px 14px; -fx-border-color: #2b2c2f; -fx-border-radius: 16px;");
 
-        Label sparkLabel = new Label("✦");
-        sparkLabel.setStyle("-fx-text-fill: #c58af9; -fx-font-size: 14px; -fx-font-weight: bold;");
+        Label sparkLabel = new Label("⚡");
+        sparkLabel.setStyle("-fx-text-fill: #8ab4f8; -fx-font-size: 13px;");
 
-        Label contentLabel = new Label("Reading prompt & analyzing context...");
-        contentLabel.setStyle("-fx-text-fill: #9aa0a6; -fx-font-size: 13px; -fx-font-style: italic;");
+        Label contentLabel = new Label("SnipTutor is typing...");
+        contentLabel.setStyle("-fx-text-fill: #9aa0a6; -fx-font-size: 12px;");
         messageBox.getChildren().addAll(sparkLabel, contentLabel);
 
         bubbleContainer.getChildren().addAll(senderLabel, messageBox);
         chatBox.getChildren().add(bubbleContainer);
         chatScrollPane.setVvalue(1.0);
 
-        // Dynamic multi-stage thinking animation
-        String[] thinkingStages = {
-            "Reading prompt & defining problem context...",
-            "Analyzing problem intent & edge cases...",
-            "Synthesizing solution & formulating steps...",
-            "Formulating conversational response..."
-        };
-
-        final int[] stageIdx = {0};
-        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
-            new javafx.animation.KeyFrame(javafx.util.Duration.millis(1100), e -> {
-                stageIdx[0] = (stageIdx[0] + 1) % thinkingStages.length;
-                javafx.animation.FadeTransition ft = new javafx.animation.FadeTransition(javafx.util.Duration.millis(250), contentLabel);
-                ft.setFromValue(1.0);
-                ft.setToValue(0.3);
-                ft.setOnFinished(evt -> {
-                    contentLabel.setText(thinkingStages[stageIdx[0]]);
-                    javafx.animation.FadeTransition ftIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(250), contentLabel);
-                    ftIn.setFromValue(0.3);
-                    ftIn.setToValue(1.0);
-                    ftIn.play();
-                });
-                ft.play();
-            })
-        );
-        timeline.setCycleCount(javafx.animation.Animation.INDEFINITE);
-        timeline.play();
-
-        bubbleContainer.getProperties().put("timeline", timeline);
         return bubbleContainer;
     }
 
     private void removeLoadingBubble(VBox loadingNode) {
         if (loadingNode != null) {
-            Object tl = loadingNode.getProperties().get("timeline");
-            if (tl instanceof javafx.animation.Timeline) {
-                ((javafx.animation.Timeline) tl).stop();
-            }
             chatBox.getChildren().remove(loadingNode);
         }
     }

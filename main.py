@@ -184,23 +184,21 @@ RESPONSE STYLE & FORMATTING GUIDELINES (Replicate Google Gemini Flash):
 """
 
 def _generate_fast(gemini_client, model_name: str, contents_payload):
-    """Call Gemini with low-latency settings, avoiding thinking config errors on flash-lite models."""
-    if "3.8" in model_name or "thinking" in model_name:
-        try:
-            fast_config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0)
-            )
-            return gemini_client.models.generate_content(
-                model=model_name,
-                contents=contents_payload,
-                config=fast_config,
-            )
-        except Exception:
-            pass
-    return gemini_client.models.generate_content(
-        model=model_name,
-        contents=contents_payload,
-    )
+    """Call Gemini with zero thinking budget for sub-1.5s immediate responses."""
+    try:
+        fast_config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        )
+        return gemini_client.models.generate_content(
+            model=model_name,
+            contents=contents_payload,
+            config=fast_config,
+        )
+    except Exception:
+        return gemini_client.models.generate_content(
+            model=model_name,
+            contents=contents_payload,
+        )
 
 def call_gemini_with_metrics(
     prompt: str,
@@ -210,7 +208,6 @@ def call_gemini_with_metrics(
     global _cached_working_model
     gemini_client = get_gemini_client()
     base_models = [
-        "gemini-3.5-flash-lite",
         "gemini-3.5-flash",
     ]
     if _cached_working_model and _cached_working_model in base_models:
