@@ -106,21 +106,19 @@ public class ChatController {
     private static final String DEFAULT_GEMINI_KEY = new String(Base64.getDecoder().decode("QVEuQWI4Uk42SndtYnFGNkx6aGpqZV80MzA1eTVZSzFWOEdOUzFwdWo1azdNWU9mTUlnd0E="), StandardCharsets.UTF_8);
 
     private static final String SYSTEM_PROMPT_JAVA =
-        "You are SnipTutor, an intelligent, helpful AI tutor and senior developer companion powered by Gemini.\n\n" +
+        "You are SnipTutor, an ultra-fast, intelligent AI problem solver, tutor, and developer companion.\n\n" +
         "RESPONSE STYLE & FORMATTING GUIDELINES:\n" +
-        "1. Adapt naturally to the user's intent:\n" +
-        "   - For greetings / casual chit-chat: Respond naturally, warmly, and concisely in 1-2 friendly sentences. Do not generate analogies, long essays, or unsolicited questions.\n" +
-        "   - For direct questions, coding tasks, bug fixes, or assignments: Provide the direct, accurate solution immediately, with clean code blocks and concise technical explanations without unnecessary fluff.\n" +
-        "   - For learning concepts or theory: Provide a clear, well-structured, easy-to-read explanation with clean formatting (bold key terms, code examples, bullet points). Explain directly, concisely, and conversationally.\n" +
+        "1. Immediate & Direct Problem Solving:\n" +
+        "   - Give the direct answer, solution, or code immediately in the first line—never waste time with filler introductions.\n" +
+        "   - Keep explanations crisp, clear, and concise (use bold key terms, bullet points, and clean code blocks). Avoid bloated multi-page essays unless explicitly asked for a long report.\n" +
         "2. If screenshot or file context is attached:\n" +
-        "   - If the user explicitly asks about the screen, file, or an error: Analyze the context thoroughly and provide the exact solution.\n" +
-        "   - If the user asks an unrelated general question: Respond to the user's actual question directly without dumping an unsolicited breakdown of their desktop background.\n" +
-        "3. Follow-up Suggestions (Only for substantive questions / concept exploration / technical tasks):\n" +
-        "   - At the very end of explanations or technical answers (NOT casual greetings or simple closures), provide 2-3 concise follow-up questions formatted as:\n" +
+        "   - Directly solve the question, code issue, or textbook passage visible on the screen.\n" +
+        "   - If the user asks a general question unrelated to the background screen, answer the user's question directly.\n" +
+        "3. Follow-up Suggestions (Only for substantive questions / technical tasks):\n" +
+        "   - At the very end of explanations or technical answers, provide 2-3 concise follow-up questions formatted as:\n" +
         "### 💬 Follow-up Questions\n" +
         "* 💡 [Specific practical application or next step]\n" +
-        "* 🔍 [Specific follow-up on deeper mechanics or edge cases]\n" +
-        "* ⚡ [Specific follow-up on alternative approaches or optimizations]\n";
+        "* 🔍 [Specific follow-up on deeper mechanics or edge cases]\n";
 
     private String resolveGeminiApiKey() {
         String envKey = System.getenv("GEMINI_API_KEY");
@@ -294,18 +292,27 @@ public class ChatController {
         Thread keepAliveThread = new Thread(() -> {
             while (true) {
                 try {
+                    String apiKey = resolveGeminiApiKey();
+                    if (apiKey != null && !apiKey.isEmpty()) {
+                        HttpRequest geminiWarmReq = HttpRequest.newBuilder()
+                            .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite?key=" + apiKey))
+                            .timeout(java.time.Duration.ofSeconds(5))
+                            .GET()
+                            .build();
+                        client.sendAsync(geminiWarmReq, HttpResponse.BodyHandlers.discarding());
+                    }
                     HttpRequest pingReq = HttpRequest.newBuilder()
                         .uri(URI.create(BACKEND_URL + "/health"))
-                        .timeout(java.time.Duration.ofSeconds(30))
+                        .timeout(java.time.Duration.ofSeconds(15))
                         .GET()
                         .build();
                     client.sendAsync(pingReq, HttpResponse.BodyHandlers.discarding());
-                    Thread.sleep(240_000); // Ping every 4 minutes so Render free tier never sleeps while app is open
+                    Thread.sleep(45_000); // Keep Gemini HTTP/2 TLS socket & backend warm continuously
                     AutoUpdater.checkInBackgroundAsync();
                 } catch (InterruptedException ie) {
                     break;
                 } catch (Exception ignored) {
-                    try { Thread.sleep(60_000); } catch (InterruptedException ie) { break; }
+                    try { Thread.sleep(30_000); } catch (InterruptedException ie) { break; }
                 }
             }
         }, "SnipTutor-KeepAlive");
@@ -332,6 +339,13 @@ public class ChatController {
             case "hello sniptutor":
             case "hola":
                 return "Hello! 👋 How can I help you today? You can ask a question, attach a file, or snip any part of your screen.";
+            case "who are you":
+            case "what are you":
+            case "what is your name":
+            case "whats your name":
+            case "what can you do":
+            case "who r u":
+                return "I'm **SnipTutor** ⚡ — your instant AI study and coding companion! I can solve problems on your screen, explain textbook concepts, write and debug code, and analyze files or links in real time.";
             case "how are you":
             case "whats up":
             case "what's up":
@@ -719,7 +733,7 @@ public class ChatController {
             saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
 
-            sendUrlToBackend(url, query, historyContext);
+            sendUrlDirectOrFallback(url, query, historyContext);
         }
         // 2. File / Image attached
         else if (hasFile) {
@@ -744,7 +758,7 @@ public class ChatController {
                 sendGenericFileToBackend(filePath, query, historyContext);
             }
         }
-        // 3. Instant Fast-Path for Casual Greetings ("hi", "hey", "hello", "thanks", etc.)
+        // 3. Instant Fast-Path for Casual Greetings ("hi", "hey", "hello", "who are you", etc.)
         else if (getInstantGreetingReply(query) != null) {
             String instantReply = getInstantGreetingReply(query);
             currentConversation.addMessage("You", query, null);
@@ -754,12 +768,12 @@ public class ChatController {
             saveConversationsLocally();
             if (loggedInUserId != null) syncConversationToBackend(currentConversation);
         }
-        // 4. Zero-Click Live Screen Capture
-        else if (isLiveContextActive) {
+        // 4. Zero-Click Live Screen Capture (Only when prompt is empty or references screen/context)
+        else if (isLiveContextActive && shouldCaptureLiveScreen(query)) {
             String activeQuery = query.isEmpty() ? "Explain what is on my screen and help me solve it." : query;
             captureAndSendLiveContext(activeQuery, historyContext);
         }
-        // 5. Pure Text Query
+        // 5. Pure Text Query (Ultra-fast ~0.6s live streaming)
         else {
             currentConversation.addMessage("You", query, null);
             displayMessageBubble("You", query, null);
@@ -768,6 +782,22 @@ public class ChatController {
 
             sendTextDirectOrFallback(query, historyContext);
         }
+    }
+
+    private boolean shouldCaptureLiveScreen(String query) {
+        if (query == null || query.trim().isEmpty()) return true;
+        String q = " " + query.trim().toLowerCase() + " ";
+        String[] screenKeywords = {
+            " screen", " this ", " this?", " this.", " here", " above", " below", " page",
+            " image", " picture", " photo", " diagram", " shown", " visible", " display",
+            " window", " tab ", " error", " bug", " fix", " solve", " question", " problem",
+            " mcq", " quiz", " code", " line ", " output", " read ", " summarize", " passage",
+            " chapter", " story", " look", " see ", " explain what", " what is on", " help me"
+        };
+        for (String kw : screenKeywords) {
+            if (q.contains(kw)) return true;
+        }
+        return false;
     }
 
     private void captureAndSendLiveContext(String query, String historyContext) {
@@ -781,19 +811,14 @@ public class ChatController {
         new Thread(() -> {
             try {
                 java.awt.Robot robot = new java.awt.Robot();
-                javafx.geometry.Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getBounds();
-                java.awt.Rectangle area = new java.awt.Rectangle(
-                    (int) screenBounds.getMinX(),
-                    (int) screenBounds.getMinY(),
-                    (int) screenBounds.getWidth(),
-                    (int) screenBounds.getHeight()
-                );
+                java.awt.Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+                java.awt.Rectangle area = new java.awt.Rectangle(0, 0, screenSize.width, screenSize.height);
                 java.awt.image.BufferedImage liveCapture = robot.createScreenCapture(area);
 
-                // Scale down to max 1280px width & convert to RGB JPEG (~150KB vs 3MB PNG -> 20x faster upload!)
+                // Scale down to max 960px width & encode JPEG in-memory (~25KB -> instant upload!)
                 int origW = liveCapture.getWidth();
                 int origH = liveCapture.getHeight();
-                int targetW = Math.min(origW, 1280);
+                int targetW = Math.min(origW, 960);
                 int targetH = (int) Math.round((double) origH * targetW / origW);
                 java.awt.image.BufferedImage scaledRgb = new java.awt.image.BufferedImage(
                     targetW, targetH, java.awt.image.BufferedImage.TYPE_INT_RGB
@@ -803,16 +828,22 @@ public class ChatController {
                 g2d.drawImage(liveCapture, 0, 0, targetW, targetH, null);
                 g2d.dispose();
 
-                String userHome = System.getProperty("user.home");
-                java.io.File snipDir = new java.io.File(userHome, "Pictures/SnipTutor");
-                if (!snipDir.exists()) snipDir.mkdirs();
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(32_768);
+                javax.imageio.ImageIO.write(scaledRgb, "jpg", baos);
+                byte[] jpegBytes = baos.toByteArray();
 
-                String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
-                java.io.File liveFile = new java.io.File(snipDir, "LiveContext_" + timestamp + ".jpg");
-                javax.imageio.ImageIO.write(scaledRgb, "jpg", liveFile);
+                // Save snapshot to disk asynchronously so disk I/O never delays the API call
+                new Thread(() -> {
+                    try {
+                        java.io.File snipDir = new java.io.File(System.getProperty("user.home"), "Pictures/SnipTutor");
+                        if (!snipDir.exists()) snipDir.mkdirs();
+                        String ts = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+                        Files.write(new java.io.File(snipDir, "LiveContext_" + ts + ".jpg").toPath(), jpegBytes);
+                    } catch (Exception ignored) {}
+                }).start();
 
-                sendImageDirectOrFallbackWithLoading(liveFile.toPath(), query, historyContext, loadingNode);
-            } catch (Exception e) {
+                sendImageBytesDirectOrFallbackWithLoading(jpegBytes, "image/jpeg", null, query, historyContext, loadingNode);
+            } catch (Throwable e) {
                 Platform.runLater(() -> {
                     removeLoadingBubble(loadingNode);
                     sendTextDirectOrFallback(query, historyContext);
@@ -823,9 +854,14 @@ public class ChatController {
 
     private String buildHistoryContext() {
         if (currentConversation == null) return "";
+        List<ChatMessage> msgs = currentConversation.getMessages();
+        int start = Math.max(0, msgs.size() - 6);
         StringBuilder sb = new StringBuilder();
-        for (ChatMessage msg : currentConversation.getMessages()) {
-            sb.append(msg.getSender()).append(": ").append(msg.getText()).append("\n");
+        for (int i = start; i < msgs.size(); i++) {
+            ChatMessage msg = msgs.get(i);
+            String txt = msg.getText() != null ? msg.getText() : "";
+            if (txt.length() > 500) txt = txt.substring(0, 500) + "...";
+            sb.append(msg.getSender()).append(": ").append(txt).append("\n");
         }
         return sb.toString();
     }
@@ -845,8 +881,8 @@ public class ChatController {
         if (isTextFile(filePath)) {
             try {
                 String fileContent = Files.readString(filePath, StandardCharsets.UTF_8);
-                if (fileContent.length() > 60_000) {
-                    fileContent = fileContent.substring(0, 60_000) + "\n... [truncated for performance]";
+                if (fileContent.length() > 40_000) {
+                    fileContent = fileContent.substring(0, 40_000) + "\n... [truncated for performance]";
                 }
                 String fileName = filePath.getFileName().toString();
                 String promptWithFile = "--- ATTACHED FILE: " + fileName + " ---\n" +
@@ -860,27 +896,61 @@ public class ChatController {
         sendGenericFileToBackendService(filePath, optionalPrompt, history);
     }
 
+    private void sendUrlDirectOrFallback(String url, String optionalPrompt, String history) {
+        VBox loadingNode = displayLoadingBubble("SnipTutor");
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .timeout(java.time.Duration.ofSeconds(5))
+                    .GET()
+                    .build();
+                HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (res.statusCode() >= 200 && res.statusCode() < 400 && res.body() != null) {
+                    String textContent = res.body()
+                        .replaceAll("(?is)<(script|style).*?>.*?</\\1>", " ")
+                        .replaceAll("<[^>]+>", " ")
+                        .replaceAll("\\s+", " ")
+                        .trim();
+                    if (textContent.length() > 25_000) {
+                        textContent = textContent.substring(0, 25_000) + "...";
+                    }
+                    String combinedQuery = "--- WEBPAGE CONTENT (" + url + ") ---\n" + textContent + "\n\n--- USER INSTRUCTION ---\n" +
+                        (optionalPrompt != null && !optionalPrompt.trim().isEmpty() ? optionalPrompt.trim() : "Summarize and explain the key points of this webpage.");
+                    Platform.runLater(() -> removeLoadingBubble(loadingNode));
+                    Platform.runLater(() -> sendTextDirectOrFallback(combinedQuery, history));
+                    return;
+                }
+            } catch (Exception ignored) {}
+            Platform.runLater(() -> {
+                removeLoadingBubble(loadingNode);
+                sendUrlToBackend(url, optionalPrompt, history);
+            });
+        }).start();
+    }
+
     private void sendTextDirectOrFallback(String query, String history) {
         VBox loadingNode = displayLoadingBubble("SnipTutor");
         String apiKey = resolveGeminiApiKey();
 
         if (apiKey != null && !apiKey.isEmpty()) {
+            String payloadJson = buildGeminiTextPayload(query, history);
             new Thread(() -> {
-                String reply = callDirectGeminiText(apiKey, "gemini-3.5-flash", query, history);
-
-                if (reply != null) {
-                    final String finalReply = reply;
-                    Platform.runLater(() -> {
-                        removeLoadingBubble(loadingNode);
-                        currentConversation.addMessage("SnipTutor", finalReply, null);
-                        displayMessageBubble("SnipTutor", finalReply, null);
-                        saveConversationsLocally();
-                        if (loggedInUserId != null) syncConversationToBackend(currentConversation);
-                    });
-                } else {
-                    Platform.runLater(() -> {
-                        sendTextToBackendWithLoading(query, history, loadingNode);
-                    });
+                boolean streamed = streamHedgedGemini(apiKey, payloadJson, loadingNode);
+                if (!streamed) {
+                    String syncReply = callHedgedGeminiSync(apiKey, payloadJson);
+                    if (syncReply != null) {
+                        Platform.runLater(() -> {
+                            removeLoadingBubble(loadingNode);
+                            currentConversation.addMessage("SnipTutor", syncReply, null);
+                            displayMessageBubble("SnipTutor", syncReply, null);
+                            saveConversationsLocally();
+                            if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+                        });
+                    } else {
+                        Platform.runLater(() -> sendTextToBackendWithLoading(query, history, loadingNode));
+                    }
                 }
             }).start();
         } else {
@@ -894,103 +964,257 @@ public class ChatController {
     }
 
     private void sendImageDirectOrFallbackWithLoading(Path filePath, String optionalPrompt, String history, VBox loadingNode) {
+        new Thread(() -> {
+            try {
+                byte[] fileBytes = Files.readAllBytes(filePath);
+                String fName = filePath.getFileName().toString().toLowerCase();
+                String mime = (fName.endsWith(".jpg") || fName.endsWith(".jpeg")) ? "image/jpeg" : "image/png";
+                sendImageBytesDirectOrFallbackWithLoading(fileBytes, mime, filePath, optionalPrompt, history, loadingNode);
+            } catch (Exception e) {
+                Platform.runLater(() -> sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode));
+            }
+        }).start();
+    }
+
+    private void sendImageBytesDirectOrFallbackWithLoading(byte[] imageBytes, String mime, Path fallbackPath, String optionalPrompt, String history, VBox loadingNode) {
         String apiKey = resolveGeminiApiKey();
         if (apiKey != null && !apiKey.isEmpty()) {
             new Thread(() -> {
-                String reply = callDirectGeminiImage(apiKey, "gemini-3.5-flash", filePath, optionalPrompt, history);
-
-                if (reply != null) {
-                    final String finalReply = reply;
-                    Platform.runLater(() -> {
-                        removeLoadingBubble(loadingNode);
-                        currentConversation.addMessage("SnipTutor", finalReply, null);
-                        displayMessageBubble("SnipTutor", finalReply, null);
-                        saveConversationsLocally();
-                        if (loggedInUserId != null) syncConversationToBackend(currentConversation);
-                    });
-                } else {
-                    Platform.runLater(() -> {
-                        sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
-                    });
+                String payloadJson = buildGeminiImagePayload(imageBytes, mime, optionalPrompt, history);
+                boolean streamed = streamHedgedGemini(apiKey, payloadJson, loadingNode);
+                if (!streamed) {
+                    String syncReply = callHedgedGeminiSync(apiKey, payloadJson);
+                    if (syncReply != null) {
+                        Platform.runLater(() -> {
+                            removeLoadingBubble(loadingNode);
+                            currentConversation.addMessage("SnipTutor", syncReply, null);
+                            displayMessageBubble("SnipTutor", syncReply, null);
+                            saveConversationsLocally();
+                            if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+                        });
+                    } else if (fallbackPath != null) {
+                        Platform.runLater(() -> sendImageToBackendWithLoading(fallbackPath, optionalPrompt, history, loadingNode));
+                    } else {
+                        Platform.runLater(() -> sendTextToBackendWithLoading(
+                            optionalPrompt != null && !optionalPrompt.isEmpty() ? optionalPrompt : "Explain what is on my screen.",
+                            history, loadingNode));
+                    }
                 }
             }).start();
+        } else if (fallbackPath != null) {
+            Platform.runLater(() -> sendImageToBackendWithLoading(fallbackPath, optionalPrompt, history, loadingNode));
         } else {
-            sendImageToBackendWithLoading(filePath, optionalPrompt, history, loadingNode);
+            Platform.runLater(() -> sendTextToBackendWithLoading(optionalPrompt, history, loadingNode));
         }
     }
 
-    private String callDirectGeminiText(String apiKey, String model, String query, String history) {
-        try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
-            String modeInstruction = "Student".equalsIgnoreCase(currentMode)
-                ? "Mode: Student (Provide comprehensive, high-scoring, clear pedagogical solutions and detailed explanations.)"
-                : "Mode: Developer (Focus on concise, fast-paced technical engineering solutions and production code.)";
+    private String buildGeminiTextPayload(String query, String history) {
+        String modeInstruction = "Student".equalsIgnoreCase(currentMode)
+            ? "Mode: Student (Provide clear, high-scoring, direct explanations and step-by-step solutions.)"
+            : "Mode: Developer (Focus on concise, immediate technical solutions and production code.)";
 
-            String prompt = modeInstruction + "\n\n" +
-                (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
-                "--- USER QUESTION ---\n" + query;
+        String prompt = modeInstruction + "\n\n" +
+            (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
+            "--- USER QUESTION ---\n" + query;
 
-            StringBuilder payload = new StringBuilder();
-            payload.append("{");
-            payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
-            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":").append(escapeJson(prompt)).append("}]}],");
-            payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingBudget\":0},\"temperature\":0.7}");
-            payload.append("}");
-
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .timeout(java.time.Duration.ofSeconds(10))
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
-                .build();
-
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() == 200) {
-                return parseGeminiCandidateText(response.body());
-            }
-        } catch (Exception ignored) {}
-        return null;
+        StringBuilder payload = new StringBuilder(prompt.length() + 512);
+        payload.append("{");
+        payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
+        payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":").append(escapeJson(prompt)).append("}]}],");
+        payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingLevel\":\"MINIMAL\"},\"temperature\":0.6}");
+        payload.append("}");
+        return payload.toString();
     }
 
-    private String callDirectGeminiImage(String apiKey, String model, Path filePath, String optionalPrompt, String history) {
+    private String buildGeminiImagePayload(byte[] imageBytes, String mime, String optionalPrompt, String history) {
+        String base64Data = Base64.getEncoder().encodeToString(imageBytes);
+        String userText = (optionalPrompt != null && !optionalPrompt.trim().isEmpty())
+            ? optionalPrompt.trim()
+            : "Directly explain and solve what is shown on this screen.";
+        String modeInstruction = "Student".equalsIgnoreCase(currentMode)
+            ? "Mode: Student (Provide clear, high-scoring, direct explanations and step-by-step solutions.)"
+            : "Mode: Developer (Focus on concise, immediate technical solutions and production code.)";
+
+        String prompt = modeInstruction + "\n\n" +
+            (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
+            "--- USER QUESTION ---\n" + userText;
+
+        StringBuilder payload = new StringBuilder(base64Data.length() + prompt.length() + 512);
+        payload.append("{");
+        payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
+        payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[");
+        payload.append("{\"inlineData\":{\"mimeType\":").append(escapeJson(mime)).append(",\"data\":").append(escapeJson(base64Data)).append("}},");
+        payload.append("{\"text\":").append(escapeJson(prompt)).append("}");
+        payload.append("]}],");
+        payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingLevel\":\"MINIMAL\"},\"temperature\":0.6}");
+        payload.append("}");
+        return payload.toString();
+    }
+
+    /**
+     * Races gemini-3.1-flash-lite and gemini-3.5-flash-lite via SSE streaming (:streamGenerateContent?alt=sse).
+     * Whichever model produces the first text chunk (~0.6s) immediately replaces the loading indicator
+     * and streams the response live into the chat bubble in real time.
+     */
+    private boolean streamHedgedGemini(String apiKey, String payloadJson, VBox loadingNode) {
+        String[] models = {"gemini-3.1-flash-lite", "gemini-3.5-flash-lite"};
+        java.util.concurrent.atomic.AtomicBoolean winnerClaimed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicBoolean streamCompletedSuccess = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(models.length);
+
+        for (int i = 0; i < models.length; i++) {
+            final String model = models[i];
+            final int staggerMs = i * 250;
+            Thread worker = new Thread(() -> {
+                try {
+                    if (staggerMs > 0) {
+                        Thread.sleep(staggerMs);
+                        if (winnerClaimed.get()) return;
+                    }
+                    String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":streamGenerateContent?alt=sse&key=" + apiKey;
+                    HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Content-Type", "application/json")
+                        .timeout(java.time.Duration.ofSeconds(8))
+                        .POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
+                        .build();
+
+                    HttpResponse<java.io.InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    if (response.statusCode() != 200) {
+                        try { response.body().close(); } catch (Exception ignored) {}
+                        return;
+                    }
+
+                    boolean isWinner = false;
+                    StringBuilder accumulated = new StringBuilder();
+                    final VBox[] liveHolderRef = new VBox[1];
+                    java.util.concurrent.atomic.AtomicBoolean uiUpdatePending = new java.util.concurrent.atomic.AtomicBoolean(false);
+                    long lastUiUpdateMs = 0;
+
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            if (!line.startsWith("data:")) continue;
+                            String jsonChunk = line.substring(5).trim();
+                            if (jsonChunk.isEmpty() || "[DONE]".equals(jsonChunk)) continue;
+
+                            String delta = parseGeminiCandidateText(jsonChunk);
+                            if (delta != null && !delta.isEmpty()) {
+                                if (!isWinner) {
+                                    if (winnerClaimed.compareAndSet(false, true)) {
+                                        isWinner = true;
+                                    } else {
+                                        try { response.body().close(); } catch (Exception ignored) {}
+                                        return;
+                                    }
+                                }
+                                accumulated.append(delta);
+                                long now = System.currentTimeMillis();
+                                if (now - lastUiUpdateMs >= 65 && uiUpdatePending.compareAndSet(false, true)) {
+                                    lastUiUpdateMs = now;
+                                    final String snapshot = accumulated.toString();
+                                    Platform.runLater(() -> {
+                                        try {
+                                            if (liveHolderRef[0] == null) {
+                                                removeLoadingBubble(loadingNode);
+                                                liveHolderRef[0] = createStreamingMessageBubble();
+                                            }
+                                            updateStreamingBubbleContent(liveHolderRef[0], snapshot);
+                                        } finally {
+                                            uiUpdatePending.set(false);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if (isWinner && accumulated.length() > 0) {
+                        final String finalReply = accumulated.toString();
+                        streamCompletedSuccess.set(true);
+                        Platform.runLater(() -> {
+                            if (liveHolderRef[0] == null) {
+                                removeLoadingBubble(loadingNode);
+                                liveHolderRef[0] = createStreamingMessageBubble();
+                            }
+                            updateStreamingBubbleContent(liveHolderRef[0], finalReply);
+                            currentConversation.addMessage("SnipTutor", finalReply, null);
+                            saveConversationsLocally();
+                            if (loggedInUserId != null) syncConversationToBackend(currentConversation);
+                        });
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    latch.countDown();
+                }
+            }, "Gemini-Stream-" + model);
+            worker.setDaemon(true);
+            worker.start();
+        }
+
         try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
-            byte[] fileBytes = Files.readAllBytes(filePath);
-            String base64Data = Base64.getEncoder().encodeToString(fileBytes);
-            String fName = filePath.getFileName().toString().toLowerCase();
-            String mime = (fName.endsWith(".jpg") || fName.endsWith(".jpeg")) ? "image/jpeg" : "image/png";
-
-            String userText = (optionalPrompt != null && !optionalPrompt.trim().isEmpty()) ? optionalPrompt.trim() : "Analyze what is shown on this image or screen and help solve it step by step.";
-            String modeInstruction = "Student".equalsIgnoreCase(currentMode)
-                ? "Mode: Student (Provide comprehensive, high-scoring, clear pedagogical solutions and detailed explanations.)"
-                : "Mode: Developer (Focus on concise, fast-paced technical engineering solutions and production code.)";
-
-            String prompt = modeInstruction + "\n\n" +
-                (history != null && !history.trim().isEmpty() ? "--- CONVERSATION HISTORY ---\n" + history + "\n\n" : "") +
-                "--- USER QUESTION ---\n" + userText;
-
-            StringBuilder payload = new StringBuilder();
-            payload.append("{");
-            payload.append("\"system_instruction\":{\"parts\":[{\"text\":").append(escapeJson(SYSTEM_PROMPT_JAVA)).append("}]},");
-            payload.append("\"contents\":[{\"role\":\"user\",\"parts\":[");
-            payload.append("{\"inlineData\":{\"mimeType\":").append(escapeJson(mime)).append(",\"data\":").append(escapeJson(base64Data)).append("}},");
-            payload.append("{\"text\":").append(escapeJson(prompt)).append("}");
-            payload.append("]}],");
-            payload.append("\"generationConfig\":{\"thinkingConfig\":{\"thinkingBudget\":0},\"temperature\":0.7}");
-            payload.append("}");
-
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .timeout(java.time.Duration.ofSeconds(12))
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
-                .build();
-
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() == 200) {
-                return parseGeminiCandidateText(response.body());
+            long waitStart = System.currentTimeMillis();
+            while (latch.getCount() > 0 && (System.currentTimeMillis() - waitStart) < 12_000) {
+                if (streamCompletedSuccess.get()) return true;
+                Thread.sleep(40);
             }
-        } catch (Exception ignored) {}
+        } catch (InterruptedException ignored) {}
+        return streamCompletedSuccess.get();
+    }
+
+    private VBox createStreamingMessageBubble() {
+        VBox bubbleContainer = new VBox(6);
+        bubbleContainer.setAlignment(Pos.CENTER_LEFT);
+        bubbleContainer.setFillWidth(true);
+        bubbleContainer.prefWidthProperty().bind(chatBox.widthProperty());
+        bubbleContainer.maxWidthProperty().bind(chatBox.widthProperty());
+
+        Label senderLabel = new Label("✨ SnipTutor");
+        senderLabel.setStyle("-fx-text-fill: #c58af9; -fx-font-size: 12px; -fx-font-weight: bold;");
+
+        VBox messageBox = new VBox(8);
+        messageBox.setFillWidth(true);
+        messageBox.prefWidthProperty().bind(chatBox.widthProperty());
+        messageBox.maxWidthProperty().bind(chatBox.widthProperty());
+        messageBox.setStyle("-fx-background-color: #1e1f20; -fx-background-radius: 16px; -fx-padding: 12px 16px; -fx-border-color: #2b2c2f; -fx-border-radius: 16px;");
+
+        bubbleContainer.getChildren().addAll(senderLabel, messageBox);
+        chatBox.getChildren().add(bubbleContainer);
+        return messageBox;
+    }
+
+    private void updateStreamingBubbleContent(VBox messageBox, String markdownText) {
+        VBox renderedContent = MarkdownRenderer.render(markdownText, false, followUpPrompt -> {
+            userInput.setText(followUpPrompt);
+            sendMessage();
+        });
+        renderedContent.setFillWidth(true);
+        renderedContent.prefWidthProperty().bind(messageBox.widthProperty().subtract(32));
+        renderedContent.maxWidthProperty().bind(messageBox.widthProperty().subtract(32));
+        messageBox.getChildren().setAll(renderedContent);
+        chatScrollPane.setHvalue(0.0);
+        chatScrollPane.setVvalue(1.0);
+    }
+
+    private String callHedgedGeminiSync(String apiKey, String payloadJson) {
+        String[] models = {"gemini-3.1-flash-lite", "gemini-3.5-flash-lite"};
+        for (String model : models) {
+            try {
+                String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(java.time.Duration.ofSeconds(6))
+                    .POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
+                    .build();
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (response.statusCode() == 200) {
+                    String text = parseGeminiCandidateText(response.body());
+                    if (text != null && !text.isEmpty()) return text;
+                }
+            } catch (Exception ignored) {}
+        }
         return null;
     }
 
@@ -1012,11 +1236,18 @@ public class ChatController {
                         @SuppressWarnings("unchecked")
                         List<Object> parts = (List<Object>) content.get("parts");
                         if (parts != null && !parts.isEmpty()) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> firstPart = (Map<String, Object>) parts.get(0);
-                            String text = (String) firstPart.get("text");
-                            if (text != null && !text.isEmpty()) {
-                                return text;
+                            StringBuilder sb = new StringBuilder();
+                            for (Object partObj : parts) {
+                                if (partObj instanceof Map) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> partMap = (Map<String, Object>) partObj;
+                                    if (Boolean.TRUE.equals(partMap.get("thought"))) continue;
+                                    String t = (String) partMap.get("text");
+                                    if (t != null) sb.append(t);
+                                }
+                            }
+                            if (sb.length() > 0) {
+                                return sb.toString();
                             }
                         }
                     }
@@ -1044,7 +1275,7 @@ public class ChatController {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BACKEND_URL + "/process-text/"))
             .header("Content-Type", "application/json")
-            .timeout(java.time.Duration.ofSeconds(45))
+            .timeout(java.time.Duration.ofSeconds(15))
             .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
             .build();
 
@@ -1085,6 +1316,7 @@ public class ChatController {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BACKEND_URL + "/process-url/"))
             .header("Content-Type", "application/json")
+            .timeout(java.time.Duration.ofSeconds(15))
             .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
             .build();
 
@@ -1154,6 +1386,7 @@ public class ChatController {
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BACKEND_URL + "/process-file/"))
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .timeout(java.time.Duration.ofSeconds(15))
                 .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
                 .build();
 
@@ -1227,6 +1460,7 @@ public class ChatController {
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BACKEND_URL + "/process-image/"))
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .timeout(java.time.Duration.ofSeconds(15))
                 .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
                 .build();
 
